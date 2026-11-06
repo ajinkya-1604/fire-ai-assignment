@@ -16,14 +16,15 @@ This document presents a comprehensive, evidence-based decision matrix grounded 
 | **Deduction & Surcharge Caps** | **Deterministic Rules** | Mathematical boundary conditions, non-linear cliff edges | **100.0% Exact** | **0.062 ms** | **$0.00** | Exact rupee limits (₹1.5L, ₹50k, ₹75k) |
 | **Natural Language Tax Parser** | **Hybrid (Regex + LLM Fallback)** | High-frequency regex captures 90%+; LLM handles ambiguous colloquialisms | **96.8% Parse** | **1.2 ms** (Regex) / **1.4s** (LLM) | **$0.08** (Blended) | Structured Pydantic schema validation |
 | **Tax Law Compilation (Code Gen)** | **LLM at Build Time** | High-level synthesis from legal gazette into versioned JSON rules | **100.0% Verified** | **Offline Step** | **<$0.02** (One-time) | Human tax professional sign-off |
-| **Schema & Structural Validation** | **Deterministic Rules** | Exact column sets, missing required fields, type checks | **1.0000 F1** | **0.21 ms** | **$0.00** | Exact column difference trace |
-| **Range & Future Date Bounds** | **Deterministic Rules** | Physical/temporal constants ($t_{\text{close}} \ge t_{\text{create}}$, $t \le \text{now}$) | **1.0000 F1** | **1.65 ms** | **$0.00** | Vectorized Boolean assertion |
-| **Exact Duplicate Ingestion** | **Deterministic Rules** | Cryptographic hash / memory index lookup | **1.0000 F1** | **17.59 ms** | **$0.00** | Identical primary key conflict |
-| **Fuzzy / Near-Duplicate Records** | **Statistical / ML** | Levenshtein / Jaccard n-gram distance over noisy strings | **1.0000 F1** | **402.66 ms** | **$0.00** | Continuous similarity score [0.0 - 1.0] |
-| **Agency Null-Rate Spikes** | **Statistical / ML** | Rolling window mean and standard deviation deviation | **1.0000 F1** | **45.12 ms** | **$0.00** | $Z \ge 2.0$ standard deviations |
-| **Categorical Distribution Drift** | **Statistical / ML** | Non-parametric frequency shift (KL divergence, Population Stability Index) | **1.0000 F1** | **4.39 ms** | **$0.00** | Baseline vs inference divergence score |
-| **Spatial / Geospatial Inversion** | **Deterministic Rules + LOF** | Disjoint coordinate bounding box (Rules) + Local Outlier Factor (density) | **0.9346 F1** | **3.86 ms** | **$0.00** | Outlier density quotient / Bounding box |
-| **Semantic Contradiction & Novelty** | **LLM Reviewer (Sampled)** | Nuanced multi-column business context and open text reasoning | **NOT RUN (Target ~0.85+)** | **~1,200 ms** | **$46.50** | Natural language explanatory diagnostic |
+| **Schema & Structural Validation (Col 1-2)** | **Deterministic Rules** | Exact column sets, missing required fields, type checks | **1.0000 F1** | **0.36 ms** | **$0.00** | Exact column difference trace |
+| **Temporal & Ordering Bounds (Col 3, 8)** | **Deterministic Rules** | Date format parse, temporal constraints ($t_{\text{close}} \ge t_{\text{create}}$) | **1.0000 F1** | **3.54 ms** | **$0.00** | Vectorized Boolean assertion |
+| **Exact Duplicate Ingestion (Col 5)** | **Deterministic Rules** | Primary key conflict / row hash lookup | **1.0000 F1** | **80.90 ms** | **$0.00** | Identical unique_key conflict |
+| **Fuzzy / Near-Duplicate Records (Col 6)** | **Statistical / ML** | Jaccard 3-gram distance over noisy addresses/descriptors | **0.6250 F1** | **33.20 ms** | **$0.00** | Continuous similarity score [0.0 - 1.0] |
+| **Agency Null-Rate Spikes (Col 7)** | **Statistical / ML** | Rolling window agency null deviation ($Z \ge 2.0$) | **1.0000 F1** | **4.65 ms** | **$0.00** | $Z \ge 2.0$ standard deviations |
+| **Spatial Inversion (Col 4)** | **Deterministic Rules + LOF** | Disjoint coordinate bounding box (Rules) + Local Outlier Factor (density) | **0.9346 F1** | **3.86 ms** | **$0.00** | Outlier density quotient / Bounding box |
+| **Relational Consistency (Col 9-11)** | **Hybrid (Rules + LLM)** | Cross-borough ZIP lookup, taxonomy trees, status contradiction | **1.0000 F1** (Rules) | **2.18 ms** | **$0.00** | Structured relational lookup tables |
+| **PII Leakage in Free-Text (Col 12)** | **Rules (Regex) + LLM** | SSN, phone numbers, email regex + contextual PII audit | **0.9615 F1** (Rules) | **79.09 ms** | **$0.00** | Regex pattern matches & PII redact |
+| **End-to-End Composite Pipeline** | **Multi-Tier Hybrid Pipeline** | Sequential fast-fail: Tier 1 (Rules) $\to$ Tier 2 (Stats) $\to$ Tier 3 (LLM) | **1.0000 Recall** *(0.3067 F1 on real data; 1.0000 on synthetic)* | **93.41 ms** (5,352.6 r/s) | **$0.00** *(~$0.46 w/ 1% audit)* | Full multi-tier structured trace |
 
 ---
 

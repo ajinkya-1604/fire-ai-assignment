@@ -42,10 +42,10 @@ A complete, production-grade Python engineering project comparing **Deterministi
 ## Architectural Highlights
 
 - **Statutory Rupee-Exact Precision**: All financial calculations use Python `Decimal` (`ROUND_HALF_UP`), eliminating binary floating-point rounding errors (`0.1 + 0.2 != 0.3`).
-- **Official Ground Truth Verification**: 30 benchmark cases verified to the exact rupee against the official Indian Income Tax Department portal.
+- **Statutory Test Vector Verification**: 30 benchmark test vectors derived strictly from enacted Indian Income Tax provisions and verified via automated regression assertions.
 - **Graceful Degradation**: Zero external API lock-in. If `GEMINI_API_KEY` is absent, the system runs all deterministic and statistical modules with 100% test coverage and transparently marks LLM query benchmarks as `NOT_RUN`.
 - **Zero Hallucinated Numbers**: All reported metrics, latencies, and throughputs are dynamically recorded and saved to `reports/`.
-- **Multi-Tier Hybrid Architecture**: Demonstrates why combining high-speed deterministic filtering (Tier 1), statistical batch drift monitoring (Tier 2), and selective LLM review (Tier 3) achieves **1.0 F1 score at >5,000 rows/sec** with near-zero marginal cost.
+- **Multi-Tier Hybrid Architecture**: Demonstrates how combining high-speed deterministic filtering (Tier 1), statistical batch drift monitoring (Tier 2), and selective LLM review (Tier 3) balances high recall (1.0000) with sub-millisecond execution and zero marginal API cost.
 
 ---
 

@@ -255,13 +255,47 @@ def run_dq_benchmarks(batch_size: int = 500, seed: int = 42) -> Dict[str, Any]:
     # 2. Statistical-Only
     p_stats = pipeline.run_statistical_only(composite_df, y_true=composite_y_true)
     # 3. LLM-Only
-    p_llm = pipeline.run_llm_only(composite_df, y_true=composite_y_true)
+    if gemini_client.is_configured():
+        p_llm = pipeline.run_llm_only(composite_df, y_true=composite_y_true)
+        llm_pipeline_entry = {
+            "name": p_llm.name,
+            "status": "RUN_LIVE",
+            "latency_ms": p_llm.latency_ms,
+            "throughput_rows_per_sec": p_llm.throughput_rows_per_sec,
+            "cost_per_million_rows_usd": round((p_llm.cost_usd / max(1, len(composite_df))) * 1_000_000, 2),
+            "metrics": p_llm.metrics,
+        }
+    else:
+        llm_pipeline_entry = {
+            "name": "LLM-Only Pipeline (Sampled)",
+            "status": "NOT_RUN",
+            "note": "GEMINI_API_KEY unconfigured. Ground-truth metrics marked NOT RUN.",
+            "latency_ms": "NOT_RUN",
+            "throughput_rows_per_sec": "NOT_RUN",
+            "cost_per_million_rows_usd": "NOT_RUN",
+            "metrics": {
+                "accuracy": "NOT_RUN",
+                "precision": "NOT_RUN",
+                "recall": "NOT_RUN",
+                "f1": "NOT_RUN",
+                "detection_rate": "NOT_RUN",
+                "false_alarm_rate": "NOT_RUN",
+            },
+            "theoretical_estimates": {
+                "estimated_cost_per_million_rows_usd": 46.50,
+                "estimated_cost_per_million_rows_inr": round(46.50 * USD_TO_INR, 2),
+                "estimated_throughput_rows_sec": 8.5,
+                "note": "Theoretical model reference: ~300 in / 80 out tokens per row @ Gemini 1.5 Flash published token pricing.",
+            },
+        }
+
     # 4. Hybrid Multi-Tier
     p_hybrid = pipeline.run_hybrid_pipeline(composite_df, y_true=composite_y_true)
 
     all_results["pipeline_comparison"] = {
         "rules_only": {
             "name": p_rules.name,
+            "status": "BENCHMARKED",
             "latency_ms": p_rules.latency_ms,
             "throughput_rows_per_sec": p_rules.throughput_rows_per_sec,
             "cost_per_million_rows_usd": 0.0,
@@ -269,20 +303,16 @@ def run_dq_benchmarks(batch_size: int = 500, seed: int = 42) -> Dict[str, Any]:
         },
         "statistical_only": {
             "name": p_stats.name,
+            "status": "BENCHMARKED",
             "latency_ms": p_stats.latency_ms,
             "throughput_rows_per_sec": p_stats.throughput_rows_per_sec,
             "cost_per_million_rows_usd": 0.0,
             "metrics": p_stats.metrics,
         },
-        "llm_only": {
-            "name": p_llm.name,
-            "latency_ms": p_llm.latency_ms,
-            "throughput_rows_per_sec": p_llm.throughput_rows_per_sec,
-            "cost_per_million_rows_usd": round((p_llm.cost_usd / max(1, len(composite_df))) * 1_000_000, 2),
-            "metrics": p_llm.metrics,
-        },
+        "llm_only": llm_pipeline_entry,
         "hybrid": {
             "name": p_hybrid.name,
+            "status": "BENCHMARKED",
             "latency_ms": p_hybrid.latency_ms,
             "throughput_rows_per_sec": p_hybrid.throughput_rows_per_sec,
             "cost_per_million_rows_usd": round((p_hybrid.cost_usd / max(1, len(composite_df))) * 1_000_000, 4),
@@ -322,13 +352,16 @@ def print_dq_benchmark_table(results: Dict[str, Any]):
     print("-" * 115)
 
     for pipe_key, p in results["pipeline_comparison"].items():
-        m = p.get("metrics", {})
-        f1 = m.get("f1", "N/A")
-        prec = m.get("precision", "N/A")
-        rec = m.get("recall", "N/A")
-        thp = p.get("throughput_rows_per_sec", 0.0)
-        cost = p.get("cost_per_million_rows_usd", 0.0)
-        print(f"{p['name']:<30} | {str(f1):<10} | {str(prec):<10} | {str(rec):<10} | {str(thp):<18} | ${str(cost):<12}")
+        if p.get("status") == "NOT_RUN":
+            print(f"{p['name']:<30} | {'NOT_RUN':<10} | {'NOT_RUN':<10} | {'NOT_RUN':<10} | {'NOT_RUN':<18} | {'NOT_RUN (Est $46.50)':<12}")
+        else:
+            m = p.get("metrics", {})
+            f1 = m.get("f1", "N/A")
+            prec = m.get("precision", "N/A")
+            rec = m.get("recall", "N/A")
+            thp = p.get("throughput_rows_per_sec", 0.0)
+            cost = p.get("cost_per_million_rows_usd", 0.0)
+            print(f"{p['name']:<30} | {str(f1):<10} | {str(prec):<10} | {str(rec):<10} | {str(thp):<18} | ${str(cost):<12}")
     print("=" * 115 + "\n")
 
 

@@ -73,50 +73,53 @@ COMPLAINT_TYPES_MAP = {
 # =============================================================================
 
 def fetch_real_nyc_311_data(
-    total_records: int = 5000,
-    page_size: int = 1000,
+    total_records: int = 2500,
     year: int = 2023,
     app_token: Optional[str] = None,
     save_path: Optional[Path] = None,
 ) -> pd.DataFrame:
     """
     Fetches real NYC Open Data records created during calendar year 2023.
-    Uses pagination with `$limit` and `$offset`.
-    Strictly verifies that all returned records fall within 2023.
-    Saves data and provenance metadata manifest.
-    
+    Uses seasonal stratified pagination across 2023 (January, April, July, October, December)
+    to retrieve a genuinely representative sample across all seasons of 2023.
+    Strictly verifies that all returned records fall within calendar year 2023.
+    Saves data and provenance metadata manifest clearly labeled as a representative sample.
+
     Raises:
         ConnectionError: If network request fails or API is unreachable.
         ValueError: If returned records violate the calendar year 2023 date range.
     """
     target_path = save_path or REAL_DATA_PATH
     logger.info(
-        f"Initiating paginated fetch for REAL NYC 311 records (Target={total_records}, Year={year}, PageSize={page_size})..."
+        f"Initiating representative paginated fetch for REAL NYC 311 records (Target={total_records}, Year={year})..."
     )
 
+    windows = [
+        (f"{year}-01-15T00:00:00.000", f"{year}-01-16T23:59:59.999"),
+        (f"{year}-04-15T00:00:00.000", f"{year}-04-16T23:59:59.999"),
+        (f"{year}-07-15T00:00:00.000", f"{year}-07-16T23:59:59.999"),
+        (f"{year}-10-15T00:00:00.000", f"{year}-10-16T23:59:59.999"),
+        (f"{year}-12-15T00:00:00.000", f"{year}-12-16T23:59:59.999"),
+    ]
+    per_window_limit = max(100, total_records // len(windows))
+
     all_records: List[Dict[str, Any]] = []
-    offset = 0
     headers = {"Accept": "application/json"}
     if app_token:
         headers["X-App-Token"] = app_token
 
-    # Where query strictly targeting calendar year 2023
-    where_clause = f"created_date between '{year}-01-01T00:00:00.000' and '{year}-12-31T23:59:59.999'"
-
-    max_retries = 4
-    while len(all_records) < total_records:
-        current_limit = min(page_size, total_records - len(all_records))
+    max_retries = 3
+    for w_start, w_end in windows:
         params = {
-            "$where": where_clause,
-            "$limit": current_limit,
-            "$offset": offset,
+            "$where": f"created_date between '{w_start}' and '{w_end}'",
+            "$limit": per_window_limit,
         }
 
         success = False
         for attempt in range(1, max_retries + 1):
             try:
-                logger.info(f"Fetching page at offset {offset} (limit={current_limit}, attempt {attempt}/{max_retries})...")
-                response = requests.get(NYC_311_ENDPOINT, params=params, headers=headers, timeout=45)
+                logger.info(f"Fetching {per_window_limit} records for window {w_start[:7]} (attempt {attempt}/{max_retries})...")
+                response = requests.get(NYC_311_ENDPOINT, params=params, headers=headers, timeout=30)
                 if response.status_code == 429:
                     wait_time = attempt * 3.0
                     logger.warning(f"NYC Open Data API 429 rate limit. Backing off for {wait_time}s...")
@@ -129,28 +132,21 @@ def fetch_real_nyc_311_data(
                     )
 
                 batch = response.json()
-                if not isinstance(batch, list) or len(batch) == 0:
-                    logger.info(f"No further records returned at offset {offset}.")
+                if isinstance(batch, list) and len(batch) > 0:
+                    all_records.extend(batch)
+                    logger.info(f"Retrieved {len(batch)} records for {w_start[:7]} (Total so far: {len(all_records)}).")
                     success = True
+                    time.sleep(0.5)
                     break
-
-                all_records.extend(batch)
-                offset += len(batch)
-                logger.info(f"Retrieved {len(batch)} records (Total so far: {len(all_records)}/{total_records}).")
-                success = True
-                time.sleep(1.0)  # Politeness interval between paginated requests
-                break
+                else:
+                    logger.warning(f"No records returned for window {w_start} to {w_end}.")
+                    break
 
             except Exception as e:
                 if attempt == max_retries:
-                    logger.error(f"Failed to fetch records from NYC Open Data API at offset {offset}: {e}")
-                    raise ConnectionError(
-                        f"Failed to query official NYC 311 endpoint at offset {offset}: {e}"
-                    ) from e
+                    logger.error(f"Failed to fetch records for window {w_start}: {e}")
+                    raise ConnectionError(f"Failed to query NYC 311 endpoint: {e}") from e
                 time.sleep(attempt * 2.0)
-
-        if not success or (isinstance(batch, list) and len(batch) == 0):
-            break
 
     if len(all_records) == 0:
         raise ValueError("Zero records retrieved from NYC Open Data API for calendar year 2023.")
@@ -179,7 +175,8 @@ def fetch_real_nyc_311_data(
     df_real.to_csv(target_path, index=False)
 
     manifest = {
-        "dataset_type": "REAL_NYC_311",
+        "dataset_type": "REAL_NYC_311_REPRESENTATIVE_SAMPLE",
+        "description": "Representative stratified sample across all seasons of calendar year 2023 (Jan, Apr, Jul, Oct, Dec). Not the complete historical multi-million row archive.",
         "data_source": "NYC Open Data (Socrata API - erm2-nwe9)",
         "endpoint": NYC_311_ENDPOINT,
         "calendar_year": year,
@@ -188,7 +185,9 @@ def fetch_real_nyc_311_data(
         "date_range_verified": True,
         "earliest_created_date": str(min_date),
         "latest_created_date": str(max_date),
-        "columns": list(df_real.columns),
+        "sampling_method": "Stratified seasonal window pagination across calendar year 2023",
+        "is_complete_nyc_archive": False,
+        "is_representative_sample": True,
         "saved_to": str(target_path),
         "fetched_at_utc": datetime.now(timezone.utc).isoformat(),
     }
@@ -196,7 +195,7 @@ def fetch_real_nyc_311_data(
         json.dump(manifest, f, indent=2)
 
     logger.info(
-        f"Successfully fetched, verified, and saved {len(df_real)} REAL records to {target_path}."
+        f"Successfully fetched, verified, and saved {len(df_real)} representative REAL records to {target_path}."
     )
     return df_real
 

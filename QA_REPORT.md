@@ -16,8 +16,8 @@ Following a comprehensive technical review, 8 critical integrity, consistency, a
 |---|---|---|---|:---:|
 | **Issue 1** | `RESULTS_A.md` | Reported estimated LLM accuracy and determinism as numerical facts while JSON benchmark recorded `NOT_RUN`. | Replaced all unexecuted LLM measurements with `NOT RUN *(Requires GEMINI_API_KEY)*`. Synchronized all Hand-Coded and Compiled metrics directly to `reports/project_a_benchmark_results.json`. | **RESOLVED** |
 | **Issue 2** | `RESULTS_B.md` | Contained non-standard corruption names (mojibake, future dates) and invented LLM F1 scores. | Corrected the report to strictly match the 12 required corruption types. Updated Markdown tables directly from `reports/project_b_benchmark_results.json`. Marked LLM as `NOT RUN`. | **RESOLVED** |
-| **Issue 3** | NYC 311 Dataset | Silent substitution between synthetic and real data without pagination or date verification. | Implemented paginated Socrata API query for calendar year 2023 with verified date boundaries (`2023-12-31T20:49:10` to `23:59:42`). Separated real and synthetic datasets into distinct files and manifests. Profiled both separately. | **RESOLVED** |
-| **Issue 4** | 12 Corruptions | Needed individual execution, ground-truth label preservation, confusion matrices, and detector applicability rationale. | Evaluated each of the 12 corruptions individually across Rules, Statistical, LLM (NOT RUN), and Hybrid. Computed confusion matrices (TP, FP, TN, FN). Documented detector applicability rationale for every corruption. | **RESOLVED** |
+| **Issue 3** | NYC 311 Dataset | Real data was concentrated near Dec 31, 2023 with only 1,000 records; needed seasonal pagination and provenance clarity. | Implemented stratified seasonal pagination across calendar year 2023 (Jan, Apr, Jul, Oct, Dec) retrieving 2,500 real verified records (45 cols). Documented row count in manifest; explicitly labeled as representative sample, not complete archive. Kept synthetic data (10,000 rows, seed 42) strictly separate. | **RESOLVED** |
+| **Issue 4** | 12 Corruptions & Composite Pipeline | Needed individual execution, ground-truth label preservation, confusion matrices, detector applicability rationale, and composite pipeline evaluation. | Evaluated all 12 corruptions individually across Rules, Statistical, LLM (NOT RUN), and Hybrid. Computed full confusion matrices. Added End-to-End Composite Multi-Corruption Pipeline benchmark (Hybrid F1 0.3067, 1.0000 recall, 5,352.6 rows/sec). | **RESOLVED** |
 | **Issue 5** | `run_all.py` | Could print success even when artifacts were missing; did not fail with non-zero exit codes. | Upgraded step 10 to check all 3 JSON artifacts and 5 Markdown reports. Enforced `sys.exit(1)` on any step failure. Enforced random seed 42. Fresh benchmarks saved on every run. | **RESOLVED** |
 | **Issue 6** | Virtual Env & Git | `.gitignore` did not exclude the `fireai/` virtual environment or temporary cache files. | Updated `.gitignore` to explicitly exclude `fireai/`, `venv/`, `.venv/`, `__pycache__/`, `.env`, temporary raw data, and cache files, while preserving `requirements.txt`. | **RESOLVED** |
 | **Issue 7** | `AI_USAGE.md` | Contained unsupported claims regarding manual web portal testing and live Gemini arithmetic errors during offline execution. | Clarified the 30 statutory benchmark vectors as legal test vectors verified via unit tests. Strictly separated actual observations from theoretical/literature explanations of LLM tokenization drift. | **RESOLVED** |
@@ -32,7 +32,7 @@ Following a comprehensive technical review, 8 critical integrity, consistency, a
 - **Fix Applied**:
   - All query-time LLM metrics in `RESULTS_A.md` now explicitly report `NOT RUN *(Requires GEMINI_API_KEY)*`.
   - Added an auditable disclosure in Section 3 separating empirical code measurements from theoretical model cost estimates ($0.0825/1k queries based on Google AI published pricing).
-  - Synchronized Hand-Coded Rules (100.0% accuracy, 100.0% determinism, 0.146 ms latency, $0.00 cost) and LLM-Compiled Rules (100.0% accuracy, 100.0% determinism, 0.172 ms latency, $0.00 cost) exactly to the generated JSON benchmark output.
+  - Synchronized Hand-Coded Rules (100.0% accuracy, 100.0% determinism, sub-millisecond latency, $0.00 cost) and LLM-Compiled Rules (100.0% accuracy, 100.0% determinism, sub-millisecond latency, $0.00 cost) exactly to the generated JSON benchmark output.
 
 ### Issue 2: Project B Corruption Types & Benchmark Integrity (`RESULTS_B.md`)
 - **Root Cause**: An earlier version of `RESULTS_B.md` referenced generic data quality corruptions (mojibake, future dates, invalid enums) rather than the 12 specific assignments requirements. Furthermore, placeholder LLM F1 scores were listed.
@@ -55,21 +55,27 @@ Following a comprehensive technical review, 8 critical integrity, consistency, a
   - Added detector applicability explanations for every corruption mode.
 
 ### Issue 3: NYC 311 Dataset Pagination, Date Range, & Provenance (`fetch_nyc_311.py`)
-- **Root Cause**: The data fetcher lacked robust pagination and fallback handling, and did not separate real Open Data records from synthetic baseline data.
+- **Root Cause**: The data fetcher previously lacked robust seasonal pagination, retrieving only 1,000 records concentrated around December 31, 2023, and needed strict separation between real Open Data records and synthetic baseline data.
 - **Fix Applied**:
-  - Implemented `fetch_real_nyc_311_data()` querying the official Socrata API (`erm2-nwe9`) with pagination (`$limit` and `$offset`), filtering strictly on `created_date between '2023-01-01T00:00:00.000' and '2023-12-31T23:59:59.999'`.
-  - Verified retrieved date range: `2023-12-31T20:49:10.000` to `2023-12-31T23:59:42.000` (1,000 verified 2023 records, 43 native attributes).
-  - Saved real data to `project_b/data/nyc_311_2023_real.csv` with audit manifest `project_b/data/nyc_311_real_manifest.json`.
-  - Kept synthetic dataset generation strictly separate (`project_b/data/nyc_311_2023_synthetic.csv`), explicitly tagged with `is_synthetic=True` and `data_source="SYNTHETIC_REPRODUCIBLE_GENERATOR"` with seed 42.
+  - Implemented stratified seasonal pagination in `fetch_real_nyc_311_data()` querying the official Socrata API (`erm2-nwe9`) across 5 calendar windows (Jan, Apr, Jul, Oct, Dec 2023), filtering strictly on `created_date between ...`.
+  - Retrieved and verified 2,500 seasonal 2023 records spanning `2023-01-16 22:13:12` to `2023-12-16 23:59:22` across all 45 native Socrata columns.
+  - Saved real data to `project_b/data/nyc_311_2023_real.csv` with audit manifest `project_b/data/nyc_311_real_manifest.json` explicitly recording `is_representative_sample=True` and `is_complete_nyc_archive=False`.
+  - Kept synthetic dataset generation strictly separate (`project_b/data/nyc_311_2023_synthetic.csv`, 10,000 records), explicitly tagged with `is_synthetic=True` and `data_source="SYNTHETIC_REPRODUCIBLE_GENERATOR"` with seed 42.
   - Upgraded `project_b/profiling/profiler.py` to profile real and synthetic data separately (`project_b_profile_report_real.json` and `project_b_profile_report_synthetic.json`).
 
-### Issue 4: Individual Evaluation of All 12 Corruptions (`dq_benchmark.py`)
+### Issue 4: Individual Evaluation of All 12 Corruptions & Composite Pipeline (`dq_benchmark.py`)
 - **Fix Applied**:
-  - In `project_b/benchmarks/dq_benchmark.py`, every corruption is evaluated independently on a clean 500-row batch.
+  - In `project_b/benchmarks/dq_benchmark.py`, evaluated all 12 required corruption types individually on 500-row batches.
   - Preserved ground-truth binary labels ($1 = \text{corrupted}, 0 = \text{clean}$).
   - Computed full confusion matrix (`total_samples`, `tp`, `fp`, `tn`, `fn`, `accuracy`, `precision`, `recall`, `f1`, `detection_rate`, `false_alarm_rate`, `latency_ms`, `throughput_rows_sec`).
   - Added `APPLICABILITY_RATIONALE` mapping for all 12 corruptions explaining why rules, statistical models, or LLMs are applicable or non-applicable.
-  - Included the Multi-Tier Hybrid Pipeline evaluation for each corruption mode.
+  - Added an End-to-End Composite Multi-Corruption Pipeline benchmark combining coordinate swaps (C4), temporal reversals (C8), and PII leaks (C12).
+  - Measured End-to-End Metrics:
+    - Rules Pipeline: Recall 1.0000, Precision 0.1812, F1 0.3067, Latency 93.41 ms, Throughput 5,352.6 rows/sec, Cost $0.00.
+    - Statistical Pipeline: Recall 1.0000, Precision 0.1724, F1 0.2941, Latency 719.54 ms, Throughput 694.9 rows/sec, Cost $0.00.
+    - LLM Pipeline: `NOT_RUN` with theoretical economics documented ($46.50/1M rows, ~8.5 rows/sec).
+    - Multi-Tier Hybrid Pipeline: Recall 1.0000, Precision 0.1812, F1 0.3067, Latency 93.41 ms, Throughput 5,352.6 rows/sec, Cost $0.00.
+  - Clarified that on unredacted real municipal records, natural text noise yields F1 ~0.3067 - 0.3676, while on clean synthetic baseline batches, F1 is 1.0000.
 
 ### Issue 5: Reproduction Harness Verification & Error Handling (`run_all.py`)
 - **Root Cause**: The verification step printed a success message without asserting that required reports were present and valid.
@@ -171,11 +177,13 @@ project_b/tests/test_corruption_and_detectors.py::test_hybrid_pipeline_execution
 ## 5. Remaining Limitations & Operational Recommendations
 
 1. **Google Gemini Free Tier Rate Limits (TPM / RPM)**:
-   When running live Gemini queries (if an API key is provided), the Google AI free tier limits queries to 15 RPM. The benchmark harness includes adaptive throttling (`time.sleep(1.0)` and batching) to stay within free-tier quotas.
-2. **NYC Open Data Socrata Rate Limits (HTTP 429)**:
-   Unauthenticated queries to Socrata without an App Token are subject to occasional throttling. The ingestion module incorporates exponential backoff and polite sleep intervals.
-3. **Statistical Outlier Calibration**:
-   The Local Outlier Factor (LOF) and Z-score models require baseline datasets without excessive pre-existing contamination. In streaming production, baselines should update via rolling 7-day windows.
+   When running live Gemini queries (if an API key is provided), the Google AI free tier limits queries to 15 RPM. The benchmark harness includes adaptive throttling (`time.sleep(1.0)` and batching) to stay within free-tier quotas. When unconfigured, the system gracefully records metrics as `NOT RUN`.
+2. **NYC Open Data Socrata Rate Limits (HTTP 429 & Query Timeouts)**:
+   Unauthenticated queries to Socrata without an App Token are subject to occasional throttling and timeouts when performing global unindexed sorts over 35M+ records. The ingestion module incorporates seasonal window queries without global order, exponential backoff, and polite sleep intervals.
+3. **Statistical Outlier Calibration & Municipal Field Noise**:
+   Uncurated real-world municipal resolution notes naturally contain inspector phone numbers, contractor names, and unit abbreviations. In production, regex PII detection should be augmented with an approved departmental entity dictionary or dedicated NER model to suppress non-sensitive municipal operational contacts.
+4. **Offline Evaluation vs. Streaming Production**:
+   Offline benchmarks evaluate micro-batches of 500 rows. In the 50M rows/day production blueprint, Tier 1 is executed on continuous Kafka streams using Polars/Rust workers, and Tier 2 runs on rolling 5-minute sliding windows via PySpark/Ray.
 
 ---
 
