@@ -16,7 +16,7 @@ Fulfills User Requirement:
      10. Save outputs in reports/."
 """
 
-from datetime import datetime
+from datetime import datetime, timezone
 import json
 import os
 from pathlib import Path
@@ -32,8 +32,8 @@ if str(PROJECT_ROOT) not in sys.path:
 
 from project_a.benchmarks.tax_benchmark import print_benchmark_table, run_benchmarks
 from project_b.benchmarks.dq_benchmark import print_dq_benchmark_table, run_dq_benchmarks
-from project_b.data.fetch_nyc_311 import get_nyc_311_data
-from project_b.profiling.profiler import DataProfiler
+from project_b.data.fetch_nyc_311 import get_nyc_311_dataset
+from project_b.profiling.profiler import profile_all_datasets
 from shared.config import DATA_B_DIR, REPORTS_DIR
 from shared.gemini_client import GeminiClient
 from shared.logging_config import setup_logging
@@ -64,19 +64,27 @@ def step_1_check_configuration() -> Dict[str, Any]:
     print(f"Project Root:          {status['project_root']}")
     print(f"Reports Output:        {status['reports_dir']}")
     if is_gemini_ready:
-        print(f"Gemini API:            CONNECTED (Model: {status['gemini_model']})")
+        print(f"Gemini API:            [CONNECTED] (Model: {status['gemini_model']})")
     else:
-        print("Gemini API:            NOT CONFIGURED (Running deterministic modules; LLM marked NOT RUN)")
+        print("Gemini API:            [NOT CONFIGURED] (Running deterministic modules; LLM marked NOT RUN)")
         print("                       To enable live Gemini calls: add GEMINI_API_KEY in .env")
 
     return status
 
 
-def step_2_check_data_availability():
-    print_step(2, "Checking Dataset Availability")
-    print("Loading or caching NYC 311 Service Requests 2023 dataset...")
-    df = get_nyc_311_data(limit=1000)
-    print(f"Dataset successfully verified: {len(df)} rows, {len(df.columns)} columns.")
+def step_2_check_data_availability() -> bool:
+    print_step(2, "Checking Dataset Availability & Provenance")
+    try:
+        df, prov = get_nyc_311_dataset(source="auto", limit=1000)
+        print(f"Dataset Loaded:        {prov['source']} ({prov['rows']} total rows available)")
+        print(f"Is Synthetic:          {prov['is_synthetic']}")
+        print(f"Sample Batch Size:     {len(df)} rows, {len(df.columns)} columns")
+        print("Dataset verification:  [PASS]")
+        return True
+    except Exception as e:
+        print(f"Dataset verification failed: {e}")
+        print("Dataset verification:  [FAIL]")
+        return False
 
 
 def step_3_run_project_a_tests() -> bool:
@@ -88,31 +96,30 @@ def step_3_run_project_a_tests() -> bool:
     print(res.stdout)
     if res.returncode != 0:
         print(res.stderr)
-        print("ERROR: Project A tests failed!")
+        print("Project A tests:       [FAIL]")
         return False
-    print("SUCCESS: All Project A tests passed!")
+    print("Project A tests:       [PASS]")
     return True
 
 
 def step_4_run_project_a_benchmarks():
     print_step(4, "Running Project A Multi-Implementation Benchmarks")
+    # Fresh benchmark execution with deterministic seed
     res = run_benchmarks(sample_size=40, determinism_runs=10)
     print_benchmark_table(res)
 
 
 def step_5_run_project_b_profiling():
-    print_step(5, "Running Project B Data Profiling")
-    df = get_nyc_311_data().iloc[:1000]
-    profiler = DataProfiler(df)
-    report = profiler.profile_all()
-    print(f"Profiled {report['summary']['total_rows']} rows.")
-    print(f"Duplicate rows detected: {report['duplicates']['exact_duplicate_rows']}")
-    print(f"Invalid dates detected:   {report['date_anomalies'].get('closed_before_created_count', 0)}")
-    print(f"Potential PII detected:   {report['pii_findings']['total_pii_occurrences']}")
+    print_step(5, "Running Project B Data Profiling (Real & Synthetic)")
+    rep = profile_all_datasets()
+    for k, v in rep.items():
+        print(f"  [{k.upper()}] Profiled {v['summary']['total_rows']} rows, {v['summary']['total_columns']} cols (Synthetic={v['provenance']['is_synthetic']})")
+    print("Data Profiling:        [PASS]")
 
 
 def step_6_7_8_run_project_b_corruptions_and_detectors():
     print_step(6, "Running 12 Corruption Injections, Detector Families & Hybrid Pipeline Benchmarks")
+    # Fresh benchmark execution with seed=42
     res = run_dq_benchmarks(batch_size=500, seed=42)
     print_dq_benchmark_table(res)
 
@@ -126,54 +133,103 @@ def step_9_run_project_b_tests() -> bool:
     print(res.stdout)
     if res.returncode != 0:
         print(res.stderr)
-        print("ERROR: Project B tests failed!")
+        print("Project B tests:       [FAIL]")
         return False
-    print("SUCCESS: All Project B tests passed!")
+    print("Project B tests:       [PASS]")
     return True
 
 
-def step_10_verify_reports_and_output():
+def step_10_verify_reports_and_output() -> bool:
     print_step(10, "Verifying Generated Reports & Output Artifacts")
-    expected_reports = [
+    
+    # Required JSON Benchmark Artifacts
+    required_json_artifacts = [
         REPORTS_DIR / "project_a_benchmark_results.json",
         REPORTS_DIR / "project_b_profile_report.json",
         REPORTS_DIR / "project_b_benchmark_results.json",
     ]
 
-    all_exist = True
-    for p in expected_reports:
-        if p.exists():
-            size_kb = p.stat().st_size / 1024.0
-            print(f"  [OK] {p.name:<35} ({size_kb:.1f} KB)")
-        else:
-            print(f"  [MISSING] {p.name}")
-            all_exist = False
+    # Required Documentation Deliverables
+    required_markdown_reports = [
+        PROJECT_ROOT / "RESULTS_A.md",
+        PROJECT_ROOT / "RESULTS_B.md",
+        PROJECT_ROOT / "DECISION_MATRIX.md",
+        PROJECT_ROOT / "AI_USAGE.md",
+        PROJECT_ROOT / "README.md",
+    ]
 
-    print("\n" + "=" * 80)
-    print("ALL EXPERIMENTS SUCCESSFULLY EXECUTED AND REPRODUCED!")
-    print("=" * 80)
-    print("Interactive Streamlit Dashboard can be launched with:")
-    print("    streamlit run dashboard/app.py\n")
+    all_ok = True
+
+    print("\n--- JSON Benchmark Outputs ---")
+    for p in required_json_artifacts:
+        if p.exists() and p.stat().st_size > 0:
+            size_kb = p.stat().st_size / 1024.0
+            print(f"  [PASS] {p.name:<35} ({size_kb:.1f} KB)")
+        else:
+            print(f"  [FAIL] {p.name:<35} (MISSING OR EMPTY)")
+            all_ok = False
+
+    print("\n--- Markdown Audit & Evaluation Reports ---")
+    for p in required_markdown_reports:
+        if p.exists() and p.stat().st_size > 0:
+            size_kb = p.stat().st_size / 1024.0
+            print(f"  [PASS] {p.name:<35} ({size_kb:.1f} KB)")
+        else:
+            print(f"  [FAIL] {p.name:<35} (MISSING OR EMPTY)")
+            all_ok = False
+
+    return all_ok
 
 
 def main():
     start_time = time.perf_counter()
-    step_1_check_configuration()
-    step_2_check_data_availability()
+    config = step_1_check_configuration()
+    
+    if not step_2_check_data_availability():
+        print("\nERROR: Step 2 (Data Availability) failed. Aborting execution.")
+        sys.exit(1)
 
     if not step_3_run_project_a_tests():
+        print("\nERROR: Step 3 (Project A Tests) failed. Aborting execution.")
         sys.exit(1)
 
-    step_4_run_project_a_benchmarks()
-    step_5_run_project_b_profiling()
-    step_6_7_8_run_project_b_corruptions_and_detectors()
+    try:
+        step_4_run_project_a_benchmarks()
+    except Exception as e:
+        print(f"\nERROR in Step 4 (Project A Benchmarks): {e}")
+        sys.exit(1)
+
+    try:
+        step_5_run_project_b_profiling()
+    except Exception as e:
+        print(f"\nERROR in Step 5 (Project B Profiling): {e}")
+        sys.exit(1)
+
+    try:
+        step_6_7_8_run_project_b_corruptions_and_detectors()
+    except Exception as e:
+        print(f"\nERROR in Step 6-8 (Project B Benchmarks): {e}")
+        sys.exit(1)
 
     if not step_9_run_project_b_tests():
+        print("\nERROR: Step 9 (Project B Tests) failed. Aborting execution.")
         sys.exit(1)
 
-    step_10_verify_reports_and_output()
+    artifacts_verified = step_10_verify_reports_and_output()
     elapsed = time.perf_counter() - start_time
-    print(f"Total reproduction elapsed time: {elapsed:.2f} seconds.")
+
+    if not artifacts_verified:
+        print("\n" + "=" * 80)
+        print("EXPERIMENT EXECUTION FAILED: Missing one or more required output artifacts!")
+        print("=" * 80)
+        sys.exit(1)
+
+    print("\n" + "=" * 80)
+    print("ALL EXPERIMENTS SUCCESSFULLY EXECUTED, VERIFIED, AND REPRODUCED!")
+    print(f"Status: PASS | Deterministic Seed: 42 | Elapsed: {elapsed:.2f}s")
+    print("=" * 80)
+    print("Interactive Streamlit Dashboard can be launched with:")
+    print("    streamlit run dashboard/app.py\n")
 
 
 if __name__ == "__main__":

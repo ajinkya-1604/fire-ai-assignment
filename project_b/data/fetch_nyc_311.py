@@ -1,18 +1,34 @@
 """
-Data Ingestion module for NYC 311 Service Requests dataset (Calendar Year 2023).
-Fetches official records via Socrata Open Data API with pagination and rate-limiting.
-Provides a realistic deterministic fallback dataset generator based on official 2023 NYC 311
-distributions in case of network unavailability, API quotas, or offline evaluation.
+Data Ingestion and Management for NYC 311 Service Requests (Calendar Year 2023).
+
+Strict Audit Compliance:
+1. Real Data Ingestion:
+   - Fetches actual NYC Open Data records created during calendar year 2023 via Socrata API.
+   - Implements multi-page pagination with $limit and $offset.
+   - Enforces strict date range verification (min and max dates must fall in 2023).
+   - Saved separately to `project_b/data/nyc_311_2023_real.csv` with a provenance manifest.
+2. Synthetic Data Ingestion:
+   - Kept strictly separate from real data.
+   - Generated with deterministic random seed (default 42).
+   - Clearly labeled with `is_synthetic=True` and saved to `project_b/data/nyc_311_2023_synthetic.csv`.
+3. Never silently conflates or substitutes real data with synthetic data.
 """
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import json
 import os
 from pathlib import Path
 import random
-from typing import Any, Dict, List, Optional
+import sys
+import time
+from typing import Any, Dict, List, Optional, Tuple
 import pandas as pd
 import requests
+
+# Ensure project root in sys.path
+PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
 
 from shared.config import DATA_B_DIR, NYC_DATASET_LIMIT, RANDOM_SEED
 from shared.logging_config import get_logger
@@ -21,7 +37,13 @@ logger = get_logger("fetch_nyc_311")
 
 # Official NYC Open Data Socrata endpoint for 311 Service Requests
 NYC_311_ENDPOINT = "https://data.cityofnewyork.us/resource/erm2-nwe9.json"
-LOCAL_RAW_DATA_PATH = DATA_B_DIR / "nyc_311_2023_raw.csv"
+REAL_DATA_PATH = DATA_B_DIR / "nyc_311_2023_real.csv"
+REAL_MANIFEST_PATH = DATA_B_DIR / "nyc_311_real_manifest.json"
+SYNTHETIC_DATA_PATH = DATA_B_DIR / "nyc_311_2023_synthetic.csv"
+SYNTHETIC_MANIFEST_PATH = DATA_B_DIR / "nyc_311_synthetic_manifest.json"
+
+# Legacy path maintained for backward compatibility
+LEGACY_RAW_DATA_PATH = DATA_B_DIR / "nyc_311_2023_raw.csv"
 
 # Official NYC 311 Borough to ZIP mapping reference
 NYC_BOROUGH_ZIPS = {
@@ -46,57 +68,161 @@ COMPLAINT_TYPES_MAP = {
 }
 
 
-def fetch_nyc_311_api(
-    limit: int = NYC_DATASET_LIMIT,
+# =============================================================================
+# 1. REAL DATA FETCHER WITH PAGINATION & DATE VERIFICATION
+# =============================================================================
+
+def fetch_real_nyc_311_data(
+    total_records: int = 5000,
+    page_size: int = 1000,
     year: int = 2023,
     app_token: Optional[str] = None,
-) -> Optional[pd.DataFrame]:
+    save_path: Optional[Path] = None,
+) -> pd.DataFrame:
     """
-    Attempt to fetch real 2023 NYC 311 records from the official Socrata Open Data API.
-    Handles pagination and saves raw data locally.
+    Fetches real NYC Open Data records created during calendar year 2023.
+    Uses pagination with `$limit` and `$offset`.
+    Strictly verifies that all returned records fall within 2023.
+    Saves data and provenance metadata manifest.
+    
+    Raises:
+        ConnectionError: If network request fails or API is unreachable.
+        ValueError: If returned records violate the calendar year 2023 date range.
     """
-    logger.info(f"Attempting to query official NYC Open Data API (limit={limit}, year={year})...")
-    params = {
-        "$where": f"created_date between '{year}-01-01T00:00:00' and '{year}-12-31T23:59:59'",
-        "$limit": limit,
-        "$order": "created_date DESC",
-    }
+    target_path = save_path or REAL_DATA_PATH
+    logger.info(
+        f"Initiating paginated fetch for REAL NYC 311 records (Target={total_records}, Year={year}, PageSize={page_size})..."
+    )
+
+    all_records: List[Dict[str, Any]] = []
+    offset = 0
     headers = {"Accept": "application/json"}
     if app_token:
         headers["X-App-Token"] = app_token
 
-    try:
-        response = requests.get(NYC_311_ENDPOINT, params=params, headers=headers, timeout=15)
-        if response.status_code == 200:
-            data = response.json()
-            if data and len(data) > 0:
-                df = pd.DataFrame(data)
-                logger.info(f"Successfully fetched {len(df)} records from NYC Open Data API.")
-                return df
-        logger.warning(f"NYC API returned status code {response.status_code}: {response.text[:200]}")
-    except Exception as e:
-        logger.warning(f"Live API request failed ({e}). Proceeding to realistic offline dataset.")
+    # Where query strictly targeting calendar year 2023
+    where_clause = f"created_date between '{year}-01-01T00:00:00.000' and '{year}-12-31T23:59:59.999'"
 
-    return None
+    max_retries = 4
+    while len(all_records) < total_records:
+        current_limit = min(page_size, total_records - len(all_records))
+        params = {
+            "$where": where_clause,
+            "$limit": current_limit,
+            "$offset": offset,
+        }
+
+        success = False
+        for attempt in range(1, max_retries + 1):
+            try:
+                logger.info(f"Fetching page at offset {offset} (limit={current_limit}, attempt {attempt}/{max_retries})...")
+                response = requests.get(NYC_311_ENDPOINT, params=params, headers=headers, timeout=45)
+                if response.status_code == 429:
+                    wait_time = attempt * 3.0
+                    logger.warning(f"NYC Open Data API 429 rate limit. Backing off for {wait_time}s...")
+                    time.sleep(wait_time)
+                    continue
+
+                if response.status_code != 200:
+                    raise ConnectionError(
+                        f"NYC Open Data API error (Status {response.status_code}): {response.text[:300]}"
+                    )
+
+                batch = response.json()
+                if not isinstance(batch, list) or len(batch) == 0:
+                    logger.info(f"No further records returned at offset {offset}.")
+                    success = True
+                    break
+
+                all_records.extend(batch)
+                offset += len(batch)
+                logger.info(f"Retrieved {len(batch)} records (Total so far: {len(all_records)}/{total_records}).")
+                success = True
+                time.sleep(1.0)  # Politeness interval between paginated requests
+                break
+
+            except Exception as e:
+                if attempt == max_retries:
+                    logger.error(f"Failed to fetch records from NYC Open Data API at offset {offset}: {e}")
+                    raise ConnectionError(
+                        f"Failed to query official NYC 311 endpoint at offset {offset}: {e}"
+                    ) from e
+                time.sleep(attempt * 2.0)
+
+        if not success or (isinstance(batch, list) and len(batch) == 0):
+            break
+
+    if len(all_records) == 0:
+        raise ValueError("Zero records retrieved from NYC Open Data API for calendar year 2023.")
+
+    df_real = pd.DataFrame(all_records)
+
+    # Date Range Verification
+    date_col = pd.to_datetime(df_real["created_date"], errors="coerce")
+    min_date = date_col.min()
+    max_date = date_col.max()
+    year_start = pd.Timestamp(f"{year}-01-01 00:00:00")
+    year_end = pd.Timestamp(f"{year}-12-31 23:59:59.999")
+
+    if min_date < year_start or max_date > year_end:
+        raise ValueError(
+            f"Date verification failed! Expected records strictly within {year}, "
+            f"got range {min_date} to {max_date}."
+        )
+
+    # Add explicit provenance tags
+    df_real["data_source"] = "NYC_OPENDATA_SOCRATA"
+    df_real["is_synthetic"] = False
+
+    # Persist dataset and audit manifest
+    target_path.parent.mkdir(parents=True, exist_ok=True)
+    df_real.to_csv(target_path, index=False)
+
+    manifest = {
+        "dataset_type": "REAL_NYC_311",
+        "data_source": "NYC Open Data (Socrata API - erm2-nwe9)",
+        "endpoint": NYC_311_ENDPOINT,
+        "calendar_year": year,
+        "total_records_retrieved": len(df_real),
+        "total_columns": len(df_real.columns),
+        "date_range_verified": True,
+        "earliest_created_date": str(min_date),
+        "latest_created_date": str(max_date),
+        "columns": list(df_real.columns),
+        "saved_to": str(target_path),
+        "fetched_at_utc": datetime.now(timezone.utc).isoformat(),
+    }
+    with open(REAL_MANIFEST_PATH, "w", encoding="utf-8") as f:
+        json.dump(manifest, f, indent=2)
+
+    logger.info(
+        f"Successfully fetched, verified, and saved {len(df_real)} REAL records to {target_path}."
+    )
+    return df_real
 
 
-def generate_realistic_nyc_311_data(
+# =============================================================================
+# 2. SEPARATE SYNTHETIC REPRODUCIBLE GENERATOR
+# =============================================================================
+
+def generate_synthetic_nyc_311_data(
     num_rows: int = 10000,
     seed: int = RANDOM_SEED,
+    save_path: Optional[Path] = None,
 ) -> pd.DataFrame:
     """
-    Generates a realistic, highly authentic NYC 311 Service Requests dataset for 2023.
-    Matches the schema, coordinates, boroughs, agencies, and text distributions of the real dataset.
-    100% reproducible with random seed.
+    Generates a deterministic, labeled synthetic NYC 311 dataset based on 2023 distributions.
+    Clearly marked as synthetic in columns and provenance manifest.
+    Used for offline evaluation, zero-network environments, and unit testing.
     """
-    logger.info(f"Generating realistic NYC 311 2023 dataset ({num_rows} rows, seed={seed})...")
+    target_path = save_path or SYNTHETIC_DATA_PATH
+    logger.info(f"Generating labeled SYNTHETIC NYC 311 dataset ({num_rows} rows, seed={seed})...")
     rng = random.Random(seed)
 
     records: List[Dict[str, Any]] = []
     base_time = datetime(2023, 1, 1, 0, 0, 0)
     total_seconds_in_2023 = 365 * 24 * 3600
 
-    # NYC Coordinate Bounding Box (~40.50 to 40.90 N, -74.25 to -73.70 W)
     borough_coords = {
         "MANHATTAN": (40.7831, -73.9712, 0.04),
         "BROOKLYN": (40.6782, -73.9442, 0.05),
@@ -104,10 +230,8 @@ def generate_realistic_nyc_311_data(
         "BRONX": (40.8448, -73.8648, 0.04),
         "STATEN ISLAND": (40.5795, -74.1502, 0.05),
     }
-
     boroughs = list(NYC_BOROUGH_ZIPS.keys())
-    borough_weights = [0.28, 0.32, 0.22, 0.14, 0.04]  # Typical NYC 311 borough distribution
-
+    borough_weights = [0.28, 0.32, 0.22, 0.14, 0.04]
     statuses = ["Closed", "Closed", "Closed", "Pending", "Open", "Assigned"]
 
     for i in range(num_rows):
@@ -117,21 +241,25 @@ def generate_realistic_nyc_311_data(
 
         status = rng.choice(statuses)
         if status == "Closed":
-            closed_delay = rng.randint(1800, 7 * 86400)  # 30 mins to 7 days
+            closed_delay = rng.randint(1800, 7 * 86400)
             closed_dt: Optional[datetime] = created_dt + timedelta(seconds=closed_delay)
             closed_str = closed_dt.strftime("%Y-%m-%dT%H:%M:%S.000")
-            resolution_desc = "The Police Department responded to the complaint and with the information available observed no evidence of the violation at that time."
+            resolution_desc = (
+                "The Police Department responded to the complaint and with the information "
+                "available observed no evidence of the violation at that time."
+            )
         else:
             closed_str = None
-            resolution_desc = "Your complaint has been received and is currently being investigated by the assigned field unit."
+            resolution_desc = (
+                "Your complaint has been received and is currently being investigated by "
+                "the assigned field unit."
+            )
 
         borough = rng.choices(boroughs, weights=borough_weights, k=1)[0]
         zip_code = rng.choice(NYC_BOROUGH_ZIPS[borough])
-
         complaint_type = rng.choice(list(COMPLAINT_TYPES_MAP.keys()))
         descriptor = rng.choice(COMPLAINT_TYPES_MAP[complaint_type])
-
-        agency = "NYPD" if "Noise" in complaint_type or "Parking" in complaint_type or "Blocked" in complaint_type else rng.choice(NYC_AGENCIES)
+        agency = "NYPD" if any(w in complaint_type for w in ["Noise", "Parking", "Blocked"]) else rng.choice(NYC_AGENCIES)
 
         lat_base, lon_base, spread = borough_coords[borough]
         latitude = round(lat_base + rng.uniform(-spread, spread), 6)
@@ -159,10 +287,119 @@ def generate_realistic_nyc_311_data(
             "latitude": str(latitude),
             "longitude": str(longitude),
             "open_data_channel_type": rng.choice(["ONLINE", "PHONE", "MOBILE"]),
+            "data_source": "SYNTHETIC_REPRODUCIBLE_GENERATOR",
+            "is_synthetic": True,
         })
 
-    df = pd.DataFrame(records)
-    return df
+    df_synth = pd.DataFrame(records)
+    target_path.parent.mkdir(parents=True, exist_ok=True)
+    df_synth.to_csv(target_path, index=False)
+
+    manifest = {
+        "dataset_type": "SYNTHETIC_NYC_311",
+        "data_source": "Synthetic Statistical Generator (Calibrated to NYC 311 2023 distributions)",
+        "calendar_year": 2023,
+        "total_records": len(df_synth),
+        "random_seed": seed,
+        "is_synthetic": True,
+        "saved_to": str(target_path),
+        "generated_at_utc": datetime.now(timezone.utc).isoformat(),
+    }
+    with open(SYNTHETIC_MANIFEST_PATH, "w", encoding="utf-8") as f:
+        json.dump(manifest, f, indent=2)
+
+    logger.info(f"Saved SYNTHETIC NYC 311 dataset ({len(df_synth)} rows) to: {target_path}")
+    return df_synth
+
+
+# Backward-compatible alias for existing tests
+generate_realistic_nyc_311_data = generate_synthetic_nyc_311_data
+
+
+# =============================================================================
+# 3. CONTROLLED DATASET ACCESSOR (CLEAR PROVENANCE & NO SILENT SUBSTITUTION)
+# =============================================================================
+
+def get_nyc_311_dataset(
+    source: str = "auto",
+    limit: Optional[int] = None,
+) -> Tuple[pd.DataFrame, Dict[str, Any]]:
+    """
+    Accesses the NYC 311 dataset with explicit provenance tracking.
+    
+    Args:
+        source: "real" (load real dataset only), "synthetic" (load synthetic only), or "auto"
+        limit: Optional maximum row count to return.
+        
+    Returns:
+        (DataFrame, ProvenanceMetadataDictionary)
+    """
+    if source == "real":
+        if not REAL_DATA_PATH.exists():
+            raise FileNotFoundError(
+                f"Real NYC 311 dataset not found at {REAL_DATA_PATH}. "
+                "Run `python project_b/data/fetch_nyc_311.py --fetch-real` with internet access to fetch real data."
+            )
+        df = pd.read_csv(REAL_DATA_PATH, dtype=str)
+        provenance = {
+            "source": "REAL_NYC_311",
+            "path": str(REAL_DATA_PATH),
+            "is_synthetic": False,
+            "rows": len(df),
+        }
+        logger.info(f"Loaded REAL NYC 311 dataset ({len(df)} rows) from {REAL_DATA_PATH}")
+
+    elif source == "synthetic":
+        if not SYNTHETIC_DATA_PATH.exists():
+            generate_synthetic_nyc_311_data()
+        df = pd.read_csv(SYNTHETIC_DATA_PATH, dtype=str)
+        provenance = {
+            "source": "SYNTHETIC_NYC_311",
+            "path": str(SYNTHETIC_DATA_PATH),
+            "is_synthetic": True,
+            "rows": len(df),
+        }
+        logger.info(f"Loaded SYNTHETIC NYC 311 dataset ({len(df)} rows) from {SYNTHETIC_DATA_PATH}")
+
+    elif source == "auto":
+        # Prefer real if present; if absent, use synthetic with explicit logging
+        if REAL_DATA_PATH.exists():
+            df = pd.read_csv(REAL_DATA_PATH, dtype=str)
+            provenance = {
+                "source": "REAL_NYC_311",
+                "path": str(REAL_DATA_PATH),
+                "is_synthetic": False,
+                "rows": len(df),
+            }
+            logger.info(f"Auto-selected REAL NYC 311 dataset ({len(df)} rows).")
+        elif SYNTHETIC_DATA_PATH.exists():
+            df = pd.read_csv(SYNTHETIC_DATA_PATH, dtype=str)
+            provenance = {
+                "source": "SYNTHETIC_NYC_311",
+                "path": str(SYNTHETIC_DATA_PATH),
+                "is_synthetic": True,
+                "rows": len(df),
+            }
+            logger.info(
+                f"[NOTICE] Real dataset not cached locally. Loaded labeled SYNTHETIC dataset ({len(df)} rows)."
+            )
+        else:
+            logger.info("No cached dataset found. Generating synthetic dataset for deterministic execution...")
+            df = generate_synthetic_nyc_311_data()
+            provenance = {
+                "source": "SYNTHETIC_NYC_311",
+                "path": str(SYNTHETIC_DATA_PATH),
+                "is_synthetic": True,
+                "rows": len(df),
+            }
+
+    else:
+        raise ValueError(f"Invalid dataset source '{source}'. Must be 'real', 'synthetic', or 'auto'.")
+
+    if limit is not None and limit > 0:
+        df = df.iloc[:limit].copy()
+
+    return df, provenance
 
 
 def get_nyc_311_data(
@@ -170,29 +407,31 @@ def get_nyc_311_data(
     limit: int = NYC_DATASET_LIMIT,
 ) -> pd.DataFrame:
     """
-    Get raw 2023 NYC 311 dataset:
-    1. Loads from local disk cache if available.
-    2. Else attempts to download from NYC Open Data API.
-    3. Else generates reproducible realistic dataset and caches it.
+    Backward-compatible entrypoint used across benchmarks, tests, and dashboard.
+    Returns DataFrame directly, logging provenance clearly.
     """
-    if not force_refresh and LOCAL_RAW_DATA_PATH.exists():
-        logger.info(f"Loading existing NYC 311 raw dataset from: {LOCAL_RAW_DATA_PATH}")
-        return pd.read_csv(LOCAL_RAW_DATA_PATH, dtype=str)
-
-    # Attempt API fetch
-    df = fetch_nyc_311_api(limit=limit)
-    if df is None or len(df) == 0:
-        # Fallback to realistic reproducible generator
-        df = generate_realistic_nyc_311_data(num_rows=limit)
-
-    # Cache locally for 100% reproducible experiments
-    df.to_csv(LOCAL_RAW_DATA_PATH, index=False)
-    logger.info(f"Saved raw NYC 311 dataset ({len(df)} rows) to: {LOCAL_RAW_DATA_PATH}")
+    df, prov = get_nyc_311_dataset(source="auto", limit=limit)
     return df
 
 
 if __name__ == "__main__":
-    df = get_nyc_311_data(force_refresh=True)
-    print(f"Dataset successfully prepared. Shape: {df.shape}")
-    print(df.head(2))
+    import argparse
+    parser = argparse.ArgumentParser(description="NYC 311 Dataset Ingestion Manager")
+    parser.add_argument("--fetch-real", action="store_true", help="Fetch actual records from NYC Open Data API")
+    parser.add_argument("--generate-synthetic", action="store_true", help="Generate synthetic reproducible dataset")
+    parser.add_argument("--count", type=int, default=5000, help="Number of records to fetch or generate")
+    args = parser.parse_args()
 
+    if args.fetch_real:
+        print(f"Fetching {args.count} real records from NYC Open Data...")
+        df_real = fetch_real_nyc_311_data(total_records=args.count)
+        print(f"Success! Real dataset shape: {df_real.shape}")
+        print(f"Date range: {df_real['created_date'].min()} to {df_real['created_date'].max()}")
+    elif args.generate_synthetic:
+        print(f"Generating {args.count} synthetic records...")
+        df_synth = generate_synthetic_nyc_311_data(num_rows=args.count)
+        print(f"Success! Synthetic dataset shape: {df_synth.shape}")
+    else:
+        df, prov = get_nyc_311_dataset(source="auto")
+        print(f"Loaded dataset: {prov['source']} ({len(df)} rows).")
+        print(f"Is Synthetic: {prov['is_synthetic']}")

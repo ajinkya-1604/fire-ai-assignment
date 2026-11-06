@@ -9,7 +9,13 @@ Usage:
 import argparse
 from decimal import Decimal
 import json
+from pathlib import Path
 import sys
+
+# Ensure project root in sys.path
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
 
 from project_a.benchmarks.tax_benchmark import print_benchmark_table, run_benchmarks
 from project_a.calculators.compiled_engine import CompiledTaxEngine

@@ -260,38 +260,38 @@ Measured over 224 test cases (30 officially verified):
 
 | Metric | Impl 1: Hand-Coded | Impl 2: Query-Time LLM | Impl 3: Compiled Rules |
 |---|---|---|---|
-| **Rupee-Exact Accuracy** | **100.0%** (224/224) | ~68.5% (Arithmetic drift) | **100.0%** (224/224) |
-| **10-Run Determinism** | **100.0%** | 82.0% | **100.0%** |
-| **Mean Execution Latency** | **0.062 ms** | 1,420 ms | **0.053 ms** |
-| **P95 Latency** | **0.084 ms** | 2,150 ms | **0.085 ms** |
-| **Marginal Cost per 1,000 Req**| **$0.00** | $0.0825 (₹6.89) | **$0.00** |
-| **Statutory Traceability** | 100% (Line-of-code) | 90% (Probabilistic) | 100% (JSON Rule ID) |
+| **Rupee-Exact Accuracy** | **100.0%** (224/224) | **NOT RUN** *(Requires GEMINI_API_KEY)* | **100.0%** (224/224) |
+| **10-Run Determinism** | **100.0%** | **NOT RUN** *(Requires GEMINI_API_KEY)* | **100.0%** |
+| **Mean Execution Latency** | **0.146 ms** | **NOT RUN** | **0.172 ms** |
+| **P95 Latency** | **0.316 ms** | **NOT RUN** | **0.282 ms** |
+| **Marginal Cost per 1,000 Req**| **$0.00** | $0.0825 *(Theoretical estimate)* | **$0.00** |
+| **Statutory Traceability** | 100% (Line-of-code) | 95% (Prompt design) | 100% (JSON Rule ID) |
 
 ---
 
 ## Project B: NYC 311 Data Quality Engine
 
-### Dataset Profiling & PII Sanitization
+### Dataset Profiling & Provenance (Real vs. Synthetic)
 
-- **Dataset**: NYC 311 Service Requests 2023 (10,000 baseline records cached in `project_b/data/nyc_311_2023_raw.csv`).
-- **PII Audit**: Identifies quasi-identifiers (street addresses and 6-decimal GPS coordinates).
-- **Strict Pre-Call Redaction**: Replaces addresses with `[REDACTED_ADDRESS]` and masks coordinates before any third-party LLM dispatch.
+- **Official Real Dataset (`nyc_311_2023_real.csv`)**: Paginated fetch directly from NYC Open Data Socrata API (`erm2-nwe9`), strictly filtered and verified for calendar year 2023. Profiled in `reports/project_b_profile_report_real.json`.
+- **Synthetic Benchmark Dataset (`nyc_311_2023_synthetic.csv`)**: Deterministic reproducible baseline (seed 42) calibrated to NYC municipal distributions for offline evaluation. Profiled in `reports/project_b_profile_report_synthetic.json`.
+- **PII Audit & Sanitization**: Identifies quasi-identifiers (street addresses and 6-decimal GPS coordinates) and strictly masks them (`[REDACTED_ADDRESS]`, `[MASKED_LAT_LON]`) prior to any LLM review.
 
 ### 12 Real-World Corruption Injectors
 
-Our corruption engine (`project_b/corruption/injector.py`) injects 12 ground-truth labeled anomaly modes:
-1. **Renamed / Dropped Column**: Structural schema violations.
-2. **Column Type Change**: Numbers cast to strings with currency formatting.
-3. **Date Format Switch**: US `MM/DD/YYYY` or `DD/MM/YYYY` mixed into ISO timestamps.
-4. **Latitude / Longitude Swapped**: Inverted spatial coordinates.
-5. **Exact Duplicate Records**: Identical unique keys or full duplicate rows.
-6. **Near-Duplicate Records**: Typo perturbations in addresses and descriptors.
-7. **Distribution Drift / Null Spike**: Sudden 60% missing values in agency attributes.
-8. **Temporal Inversion**: Closed date occurring before Created date.
-9. **ZIP Code / Borough Mismatch**: Manhattan ZIP codes assigned to Brooklyn.
-10. **Complaint Type / Descriptor Mismatch**: Noise complaints paired with water leak descriptors.
-11. **Resolution Status Contradiction**: Closed tickets with empty resolution action summaries.
-12. **PII Data Leakage**: Unredacted phone numbers and emails injected into resolution notes.
+Our corruption engine (`project_b/corruption/injector.py`) injects the exact 12 required anomaly modes:
+1. **Renamed or dropped column**: Structural schema violation (`agency` column).
+2. **Column type change**: Numeric strings converted into non-numeric corrupt values.
+3. **Date format switch**: Timestamp format switches from ISO-8601 to `MM/DD/YYYY` halfway through batch.
+4. **Latitude and longitude swapped**: Inverted spatial coordinates.
+5. **Exact duplicates**: Identical rows or repeated `unique_key` entries.
+6. **Near-duplicates**: Typo perturbations in addresses and descriptors with fresh unique keys.
+7. **Null spike in one agency**: Sudden 90% missing resolution descriptions for an agency.
+8. **Closed date earlier than created date**: Temporal paradoxes ($closed < created$).
+9. **ZIP inconsistent with borough**: Cross-borough postal code mismatches.
+10. **Complaint Type inconsistent with Descriptor**: Canonical taxonomy violations.
+11. **Resolution Description contradicting Status**: Open ticket with resolved summary, or closed ticket with pending text.
+12. **Personal data inside free-text fields**: SSN, phone numbers, and email addresses leaked in free text.
 
 ### Detector Families & Multi-Tier Pipeline
 

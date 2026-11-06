@@ -23,14 +23,44 @@ share/python-wheels/
 .installed.cfg
 *.egg
 
-# Virtual Environment
+# Virtual Environments
 .venv/
 venv/
 ENV/
+env/
+fireai/
+fire_ai_env/
 
 # Environment Variables & Secrets
 .env
 *.env.local
+.env.*
+
+# Python Cache & Build Artifacts
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+dist/
+*.egg-info/
+*.egg
+.pytest_cache/
+.coverage
+htmlcov/
+.mypy_cache/
+.ruff_cache/
+
+# Local data caches & temporary datasets
+*.sqlite3
+*.db
+project_b/data/nyc_311_raw_*.csv
+project_b/data/temp_*
+project_b/data/*_cache.csv
+project_b/data/nyc_311_temp*
+*.tmp
+*.log
 
 # IDE & Editor
 .vscode/
@@ -38,14 +68,7 @@ ENV/
 *.swp
 *.swo
 
-# Testing & Coverage
-.pytest_cache/
-.coverage
-htmlcov/
-
-# Local cache & data artifacts
-*.sqlite3
-*.db
-project_b/data/nyc_311_raw_*.csv
 !project_b/data/.gitkeep
+!requirements.txt
+!.env.example
 

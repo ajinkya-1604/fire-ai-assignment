@@ -18,10 +18,16 @@ Evaluates:
 
 import json
 from pathlib import Path
+import sys
 import time
 from typing import Any, Dict, List, Optional
 import numpy as np
 import pandas as pd
+
+# Ensure project root in sys.path
+PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
 
 from project_b.corruption.injector import CORRUPTION_NAMES, CorruptionInjector
 from project_b.data.fetch_nyc_311 import get_nyc_311_data
@@ -36,7 +42,68 @@ from shared.metrics import calculate_classification_metrics
 
 logger = get_logger("dq_benchmark")
 
-# Explanation quality ratings (1 to 5 scale based on interpretability and statutory/semantic precision)
+APPLICABILITY_RATIONALE = {
+    1: {
+        "rules": "Applicable: Immediate O(1) set-difference check detects missing or renamed columns.",
+        "statistical": "Not Applicable: Statistical models evaluate distributions of existing columns, not schema presence.",
+        "llm": "Applicable (when configured): Can identify missing schema attributes from header inspection.",
+    },
+    2: {
+        "rules": "Applicable: Vectorized pd.to_numeric / regex detects non-numeric strings in numeric fields.",
+        "statistical": "Partially Applicable: Detects string anomalies if converted to type distribution features.",
+        "llm": "Applicable (when configured): Recognizes string-formatted numbers.",
+    },
+    3: {
+        "rules": "Applicable: Vectorized datetime parsing against expected ISO format flags switched formats.",
+        "statistical": "Applicable: String length and character distribution shifts flag altered date patterns.",
+        "llm": "Applicable (when configured): Detects date format variations.",
+    },
+    4: {
+        "rules": "Applicable: Disjoint NYC bounding box check (lat: 40-41 vs lon: -74 to -73) catches swapped coordinates instantly.",
+        "statistical": "Applicable: Local Outlier Factor (LOF) and bivariate density checks isolate inverted spatial coordinates.",
+        "llm": "Applicable (when configured): Evaluates spatial coordinate plausibility.",
+    },
+    5: {
+        "rules": "Applicable: Exact hashing or df.duplicated() detects 100% of identical rows or duplicate unique keys.",
+        "statistical": "Applicable: Hash collision and frequency counts identify duplicate vectors.",
+        "llm": "Partially Applicable: Inefficient for global duplicate matching across large batches.",
+    },
+    6: {
+        "rules": "Not Applicable: Exact rule equality fails on typo perturbations (minor whitespace or spelling variations).",
+        "statistical": "Applicable: Character 3-gram Jaccard similarity and string edit distance detect near-duplicates.",
+        "llm": "Applicable (when configured): Semantic understanding recognizes identical complaints despite typos.",
+    },
+    7: {
+        "rules": "Applicable: Groupby null rate thresholding detects sudden spikes in missing fields per agency.",
+        "statistical": "Applicable: Z-score over rolling agency null rates detects deviations exceeding 2 standard deviations.",
+        "llm": "Partially Applicable: Batch-level summary reasoning can identify statistical skews.",
+    },
+    8: {
+        "rules": "Applicable: Vectorized boolean check (closed_date < created_date) catches 100% of temporal paradoxes in microsecond time.",
+        "statistical": "Applicable: Duration outlier detection (negative duration = -1 sigma) flags inverted timestamps.",
+        "llm": "Applicable (when configured): Chronological reasoning flags impossible timestamps.",
+    },
+    9: {
+        "rules": "Applicable: Relational lookup table (ZIP-to-Borough mapping) catches cross-borough mismatches.",
+        "statistical": "Partially Applicable: Joint frequency distribution of (borough, zip) isolates rare pairs.",
+        "llm": "Applicable (when configured): Geographic knowledge base catches invalid ZIPs.",
+    },
+    10: {
+        "rules": "Applicable: Canonical taxonomy check flags descriptors not in the allowable complaint_type mapping.",
+        "statistical": "Partially Applicable: Categorical co-occurrence matrix isolates unprecedented pairings.",
+        "llm": "Applicable (when configured): Semantic incoherence between category and descriptor.",
+    },
+    11: {
+        "rules": "Applicable: Deterministic status contradiction rules (e.g., status Closed with pending text).",
+        "statistical": "Partially Applicable: Text-status correlation features can flag discrepancies.",
+        "llm": "Applicable (when configured): Natural language comprehension identifies semantic contradiction between status and description.",
+    },
+    12: {
+        "rules": "Applicable: Vectorized regex patterns for SSN, phone numbers, and emails detect PII leaks.",
+        "statistical": "Partially Applicable: Token entropy and digit-density spikes indicate structured identifiers.",
+        "llm": "Applicable (when configured): Contextual entity extraction detects privacy leaks.",
+    },
+}
 EXPLANATION_QUALITY = {
     "Rules": {
         1: 5, 2: 5, 3: 5, 4: 5, 5: 5, 6: 4, 7: 4, 8: 5, 9: 5, 10: 4, 11: 4, 12: 5
@@ -157,6 +224,18 @@ def run_dq_benchmarks(batch_size: int = 500, seed: int = 42) -> Dict[str, Any]:
                 "note": "GEMINI_API_KEY unconfigured. Ground-truth metrics marked NOT RUN.",
             }
 
+        # Family 4: Multi-Tier Hybrid Pipeline on this corruption
+        h_res = pipeline.run_hybrid_pipeline(eval_df, y_true=y_true)
+        c_eval["hybrid"] = {
+            **h_res.metrics,
+            "latency_ms": h_res.latency_ms,
+            "throughput_rows_sec": h_res.throughput_rows_per_sec,
+            "cost_per_million_usd": round((h_res.cost_usd / max(1, total_eval_rows)) * 1_000_000, 4),
+        }
+
+        # Document detector applicability rationale
+        c_eval["applicability_rationale"] = APPLICABILITY_RATIONALE.get(c_id, {})
+
         all_results["per_corruption_evaluation"][c_name] = c_eval
 
     # =========================================================================
@@ -222,23 +301,23 @@ def run_dq_benchmarks(batch_size: int = 500, seed: int = 42) -> Dict[str, Any]:
 
 def print_dq_benchmark_table(results: Dict[str, Any]):
     """Print clean terminal comparison tables for Project B."""
-    print("\n" + "=" * 115)
+    print("\n" + "=" * 125)
     print("PROJECT B: DATA QUALITY DETECTOR EVALUATION ACROSS ALL 12 CORRUPTIONS")
-    print("=" * 115)
-    print(f"{'Corruption Type':<35} | {'Rules F1':<10} | {'Stats F1':<10} | {'LLM F1':<10} | {'Rules Lat':<10} | {'Stats Lat':<10}")
-    print("-" * 115)
+    print("=" * 125)
+    print(f"{'Corruption Type':<35} | {'Rules F1':<10} | {'Stats F1':<10} | {'LLM F1':<10} | {'Hybrid F1':<10} | {'Rules Lat':<10}")
+    print("-" * 125)
 
     for c_name, c_data in results["per_corruption_evaluation"].items():
         rf1 = c_data["rules"]["f1"]
         sf1 = c_data["statistical"]["f1"]
         lf1 = str(c_data["llm"]["f1"])
+        hf1 = str(c_data.get("hybrid", {}).get("f1", "N/A"))
         rlat = f"{c_data['rules']['latency_ms']}ms"
-        slat = f"{c_data['statistical']['latency_ms']}ms"
-        print(f"{c_name:<35} | {rf1:<10} | {sf1:<10} | {lf1:<10} | {rlat:<10} | {slat:<10}")
+        print(f"{c_name:<35} | {rf1:<10} | {sf1:<10} | {lf1:<10} | {hf1:<10} | {rlat:<10}")
 
-    print("\n" + "=" * 115)
+    print("\n" + "=" * 125)
     print("END-TO-END PIPELINE ARCHITECTURE COMPARISON")
-    print("=" * 115)
+    print("=" * 125)
     print(f"{'Pipeline Architecture':<30} | {'F1 Score':<10} | {'Precision':<10} | {'Recall':<10} | {'Throughput (r/s)':<18} | {'Cost / 1M ($)':<12}")
     print("-" * 115)
 

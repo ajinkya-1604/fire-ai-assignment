@@ -1,0 +1,10 @@
+{
+  "dataset_type": "SYNTHETIC_NYC_311",
+  "data_source": "Synthetic Statistical Generator (Calibrated to NYC 311 2023 distributions)",
+  "calendar_year": 2023,
+  "total_records": 200,
+  "random_seed": 42,
+  "is_synthetic": true,
+  "saved_to": "D:\\Project\\fire-ai-assignment\\project_b\\data\\nyc_311_2023_synthetic.csv",
+  "generated_at_utc": "2026-11-06T08:25:20.368259+00:00"
+}

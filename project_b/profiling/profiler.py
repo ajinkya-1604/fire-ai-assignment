@@ -12,14 +12,26 @@ Analyzes:
 9. Potential PII (SSN, Phone, Email) in free-text fields with automatic redaction.
 """
 
-from datetime import datetime
+from datetime import datetime, timezone
 import json
+from pathlib import Path
 import re
+import sys
 from typing import Any, Dict, List, Optional, Tuple
 import numpy as np
 import pandas as pd
 
-from project_b.data.fetch_nyc_311 import NYC_BOROUGH_ZIPS
+# Ensure project root in sys.path
+PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
+from project_b.data.fetch_nyc_311 import (
+    NYC_BOROUGH_ZIPS,
+    REAL_DATA_PATH,
+    SYNTHETIC_DATA_PATH,
+    get_nyc_311_dataset,
+)
 from shared.config import REPORTS_DIR
 from shared.logging_config import get_logger
 
@@ -52,16 +64,35 @@ class DataProfiler:
     Comprehensive profiler examining structural, statistical, and semantic anomalies in tabular data.
     """
 
-    def __init__(self, df: pd.DataFrame):
+    def __init__(
+        self,
+        df: pd.DataFrame,
+        dataset_name: str = "NYC 311 Dataset",
+        data_source: str = "AUTO",
+        is_synthetic: bool = False,
+    ):
         self.df = df.copy()
+        self.dataset_name = dataset_name
+        self.data_source = data_source
+        self.is_synthetic = is_synthetic
         self.total_rows = len(df)
         self.total_cols = len(df.columns)
 
-    def profile_all(self) -> Dict[str, Any]:
+    def profile_all(self, output_path: Optional[Path] = None) -> Dict[str, Any]:
         """Run all profiling checks and return consolidated report."""
-        logger.info(f"Profiling dataset ({self.total_rows} rows, {self.total_cols} columns)...")
+        logger.info(
+            f"Profiling {self.dataset_name} ({self.total_rows} rows, {self.total_cols} columns, synthetic={self.is_synthetic})..."
+        )
 
         report = {
+            "provenance": {
+                "dataset_name": self.dataset_name,
+                "data_source": self.data_source,
+                "is_synthetic": self.is_synthetic,
+                "total_rows": self.total_rows,
+                "total_columns": self.total_cols,
+                "profiled_at_utc": datetime.now(timezone.utc).isoformat(),
+            },
             "summary": {
                 "total_rows": self.total_rows,
                 "total_columns": self.total_cols,
@@ -78,7 +109,8 @@ class DataProfiler:
         }
 
         # Save report
-        out_file = REPORTS_DIR / "project_b_profile_report.json"
+        out_file = output_path or (REPORTS_DIR / "project_b_profile_report.json")
+        out_file.parent.mkdir(parents=True, exist_ok=True)
         with open(out_file, "w", encoding="utf-8") as f:
             json.dump(report, f, indent=2, default=str)
         logger.info(f"Data profiling complete. Report saved to: {out_file}")
@@ -257,13 +289,57 @@ class DataProfiler:
         }
 
 
+def profile_all_datasets() -> Dict[str, Any]:
+    """
+    Profiles real and synthetic datasets separately and saves distinct reports.
+    Also produces the primary consolidated profile report.
+    """
+    reports = {}
+
+    # 1. Profile Real Dataset if present
+    if REAL_DATA_PATH.exists():
+        logger.info(f"Profiling REAL NYC 311 dataset from {REAL_DATA_PATH}...")
+        df_real = pd.read_csv(REAL_DATA_PATH, dtype=str)
+        profiler_real = DataProfiler(
+            df_real,
+            dataset_name="Official NYC Open Data 311 (2023)",
+            data_source="NYC_OPENDATA_SOCRATA",
+            is_synthetic=False,
+        )
+        report_real = profiler_real.profile_all(
+            output_path=REPORTS_DIR / "project_b_profile_report_real.json"
+        )
+        reports["real"] = report_real
+
+    # 2. Profile Synthetic Dataset
+    if not SYNTHETIC_DATA_PATH.exists():
+        from project_b.data.fetch_nyc_311 import generate_synthetic_nyc_311_data
+        generate_synthetic_nyc_311_data()
+
+    logger.info(f"Profiling SYNTHETIC NYC 311 dataset from {SYNTHETIC_DATA_PATH}...")
+    df_synth = pd.read_csv(SYNTHETIC_DATA_PATH, dtype=str)
+    profiler_synth = DataProfiler(
+        df_synth,
+        dataset_name="Synthetic Benchmark NYC 311 (2023 Distributions)",
+        data_source="SYNTHETIC_REPRODUCIBLE_GENERATOR",
+        is_synthetic=True,
+    )
+    report_synth = profiler_synth.profile_all(
+        output_path=REPORTS_DIR / "project_b_profile_report_synthetic.json"
+    )
+    reports["synthetic"] = report_synth
+
+    # 3. Save primary consolidated report
+    primary_report = reports.get("real") or report_synth
+    with open(REPORTS_DIR / "project_b_profile_report.json", "w", encoding="utf-8") as f:
+        json.dump(primary_report, f, indent=2, default=str)
+
+    return reports
+
+
 if __name__ == "__main__":
-    from project_b.data.fetch_nyc_311 import get_nyc_311_data
-    df = get_nyc_311_data()
-    profiler = DataProfiler(df)
-    report = profiler.profile_all()
-    print("Profile Summary:")
-    print(f"Total Rows: {report['summary']['total_rows']}")
-    print(f"Duplicates: {report['duplicates']}")
-    print(f"PII Findings: {report['pii_findings']}")
+    rep = profile_all_datasets()
+    print("Profiling complete across real and synthetic datasets.")
+    for k, v in rep.items():
+        print(f"  [{k.upper()}] Rows: {v['summary']['total_rows']}, Cols: {v['summary']['total_columns']}, Synthetic: {v['provenance']['is_synthetic']}")
 

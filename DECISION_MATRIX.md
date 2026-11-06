@@ -22,8 +22,8 @@ This document presents a comprehensive, evidence-based decision matrix grounded 
 | **Fuzzy / Near-Duplicate Records** | **Statistical / ML** | Levenshtein / Jaccard n-gram distance over noisy strings | **1.0000 F1** | **402.66 ms** | **$0.00** | Continuous similarity score [0.0 - 1.0] |
 | **Agency Null-Rate Spikes** | **Statistical / ML** | Rolling window mean and standard deviation deviation | **1.0000 F1** | **45.12 ms** | **$0.00** | $Z \ge 2.0$ standard deviations |
 | **Categorical Distribution Drift** | **Statistical / ML** | Non-parametric frequency shift (KL divergence, Population Stability Index) | **1.0000 F1** | **4.39 ms** | **$0.00** | Baseline vs inference divergence score |
-| **Spatial / Geospatial Inversion** | **Deterministic Rules + LOF** | Disjoint coordinate bounding box (Rules) + Local Outlier Factor (density) | **1.0000 F1** | **2.49 ms** | **$0.00** | Outlier density quotient / Bounding box |
-| **Semantic Contradiction & Novelty** | **LLM Reviewer (Sampled)** | Nuanced multi-column business context and open text reasoning | **0.8800 F1** | **1,200 ms** | **$46.50** | Natural language explanatory diagnostic |
+| **Spatial / Geospatial Inversion** | **Deterministic Rules + LOF** | Disjoint coordinate bounding box (Rules) + Local Outlier Factor (density) | **0.9346 F1** | **3.86 ms** | **$0.00** | Outlier density quotient / Bounding box |
+| **Semantic Contradiction & Novelty** | **LLM Reviewer (Sampled)** | Nuanced multi-column business context and open text reasoning | **NOT RUN (Target ~0.85+)** | **~1,200 ms** | **$46.50** | Natural language explanatory diagnostic |
 
 ---
 

@@ -3,16 +3,16 @@
     "total_benchmark_cases": 40,
     "determinism_iterations": 10,
     "gemini_api_configured": false,
-    "timestamp": "2026-11-06T11:17:41Z"
+    "timestamp": "2026-11-06T13:55:10Z"
   },
   "implementations": {
     "hand_coded": {
       "name": "Implementation 1: Hand-Coded Rules",
       "rupee_exact_accuracy_percent": 100.0,
       "determinism_10_runs_percent": 100.0,
-      "latency_mean_ms": 0.146,
-      "latency_median_ms": 0.118,
-      "latency_p95_ms": 0.316,
+      "latency_mean_ms": 0.047,
+      "latency_median_ms": 0.04,
+      "latency_p95_ms": 0.085,
       "cost_per_1000_requests_usd": 0.0,
       "cost_per_1000_requests_inr": 0.0,
       "statutory_traceability_percent": 100.0
@@ -34,9 +34,9 @@
       "name": "Implementation 3: LLM-Compiled Rules",
       "rupee_exact_accuracy_percent": 100.0,
       "determinism_10_runs_percent": 100.0,
-      "latency_mean_ms": 0.172,
-      "latency_median_ms": 0.154,
-      "latency_p95_ms": 0.282,
+      "latency_mean_ms": 0.081,
+      "latency_median_ms": 0.084,
+      "latency_p95_ms": 0.108,
       "cost_per_1000_requests_usd": 0.0,
       "cost_per_1000_requests_inr": 0.0,
       "statutory_traceability_percent": 100.0
