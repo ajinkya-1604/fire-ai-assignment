@@ -1,0 +1,165 @@
+{
+  "summary": {
+    "total_rows": 1000,
+    "total_columns": 18,
+    "columns": [
+      "unique_key",
+      "created_date",
+      "closed_date",
+      "agency",
+      "agency_name",
+      "complaint_type",
+      "descriptor",
+      "location_type",
+      "incident_zip",
+      "incident_address",
+      "street_name",
+      "city",
+      "status",
+      "resolution_description",
+      "borough",
+      "latitude",
+      "longitude",
+      "open_data_channel_type"
+    ]
+  },
+  "missing_values": {
+    "unique_key": {
+      "missing_count": 0,
+      "missing_percent": 0.0
+    },
+    "created_date": {
+      "missing_count": 0,
+      "missing_percent": 0.0
+    },
+    "closed_date": {
+      "missing_count": 513,
+      "missing_percent": 51.3
+    },
+    "agency": {
+      "missing_count": 0,
+      "missing_percent": 0.0
+    },
+    "agency_name": {
+      "missing_count": 0,
+      "missing_percent": 0.0
+    },
+    "complaint_type": {
+      "missing_count": 0,
+      "missing_percent": 0.0
+    },
+    "descriptor": {
+      "missing_count": 0,
+      "missing_percent": 0.0
+    },
+    "location_type": {
+      "missing_count": 0,
+      "missing_percent": 0.0
+    },
+    "incident_zip": {
+      "missing_count": 0,
+      "missing_percent": 0.0
+    },
+    "incident_address": {
+      "missing_count": 0,
+      "missing_percent": 0.0
+    },
+    "street_name": {
+      "missing_count": 0,
+      "missing_percent": 0.0
+    },
+    "city": {
+      "missing_count": 0,
+      "missing_percent": 0.0
+    },
+    "status": {
+      "missing_count": 0,
+      "missing_percent": 0.0
+    },
+    "resolution_description": {
+      "missing_count": 0,
+      "missing_percent": 0.0
+    },
+    "borough": {
+      "missing_count": 0,
+      "missing_percent": 0.0
+    },
+    "latitude": {
+      "missing_count": 0,
+      "missing_percent": 0.0
+    },
+    "longitude": {
+      "missing_count": 0,
+      "missing_percent": 0.0
+    },
+    "open_data_channel_type": {
+      "missing_count": 0,
+      "missing_percent": 0.0
+    }
+  },
+  "duplicates": {
+    "exact_duplicate_rows": 0,
+    "exact_duplicate_percent": 0.0,
+    "primary_key_duplicates": 0
+  },
+  "date_anomalies": {
+    "unparseable_created_dates": 0,
+    "created_outside_year_2023": 0,
+    "unparseable_closed_dates": 0,
+    "closed_before_created_count": 0,
+    "closed_before_created_percent": 0.0
+  },
+  "coordinate_anomalies": {
+    "null_coordinates": 0,
+    "out_of_bounds_count": 0,
+    "swapped_lat_lon_count": 0,
+    "valid_coordinate_percent": 100.0
+  },
+  "zip_code_issues": {
+    "invalid_zip_format_count": 0,
+    "borough_zip_mismatch_count": 0,
+    "borough_zip_mismatch_percent": 0.0
+  },
+  "categorical_consistency": {
+    "top_agencies": {
+      "NYPD": 460,
+      "DOT": 83,
+      "DOHMH": 83,
+      "DEP": 82,
+      "DOB": 80
+    },
+    "borough_distribution": {
+      "BROOKLYN": 299,
+      "MANHATTAN": 280,
+      "QUEENS": 244,
+      "BRONX": 130,
+      "STATEN ISLAND": 47
+    },
+    "status_distribution": {
+      "Closed": 487,
+      "Pending": 180,
+      "Assigned": 178,
+      "Open": 155
+    }
+  },
+  "pii_findings": {
+    "potential_ssn_detected": 0,
+    "potential_phone_detected": 0,
+    "potential_email_detected": 0,
+    "total_pii_occurrences": 0,
+    "sanitized_examples": [],
+    "note": "All reported examples are strictly redacted. Zero raw PII exposed."
+  },
+  "unusual_distributions": {
+    "agency_resolution_null_rates": {
+      "DEP": 0.0,
+      "DOB": 0.0,
+      "DOHMH": 0.0,
+      "DOT": 0.0,
+      "DPR": 0.0,
+      "DSNY": 0.0,
+      "HPD": 0.0,
+      "NYPD": 0.0
+    }
+  }
+}

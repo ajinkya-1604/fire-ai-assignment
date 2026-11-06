@@ -1,0 +1,367 @@
+[
+  {
+    "id": 1,
+    "category": "English - Standard",
+    "query": "My annual salary is 12 lakh, I pay 20,000 rent monthly, and I invested 1.5 lakh in 80C.",
+    "expected_valid": true,
+    "description": "Standard prompt from assignment specification"
+  },
+  {
+    "id": 2,
+    "category": "English - Standard",
+    "query": "Gross salary is 1500000. Rent paid is 25000 per month in Delhi. 80C investment is 1.5 lakh, NPS is 50000.",
+    "expected_valid": true,
+    "description": "Metro accommodation with NPS"
+  },
+  {
+    "id": 3,
+    "category": "Hinglish - Normal",
+    "query": "Mera annual package 15 lakh hai, main Mumbai me 30,000 monthly kiraya deta hu aur 1.5L 80C me invest kiya hai.",
+    "expected_valid": true,
+    "description": "Hinglish query with Mumbai metro rent"
+  },
+  {
+    "id": 4,
+    "category": "Hinglish - Normal",
+    "query": "Annual CTC 8 lakh hai, koi rent nahi deta, 80C me 50,000 invest kiya hai aur mediclaim 20,000 hai.",
+    "expected_valid": true,
+    "description": "Hinglish without rent, with medical insurance"
+  },
+  {
+    "id": 5,
+    "category": "Hinglish - Normal",
+    "query": "Mera saal ka vetan 24 lakh hai. Maine 50,000 NPS 80CCD(1B) me lagaya hai aur home loan interest 2 lakh hai.",
+    "expected_valid": true,
+    "description": "Hinglish high income with home loan and NPS"
+  },
+  {
+    "id": 6,
+    "category": "Different Salary Formats",
+    "query": "My CTC is 18 LPA, paying 35k monthly rent in Bangalore, invested 150000 in PPF under 80C.",
+    "expected_valid": true,
+    "description": "LPA and k notation in English"
+  },
+  {
+    "id": 7,
+    "category": "Different Salary Formats",
+    "query": "I earn 1.2 crore per annum. 80C is 1.5 lakh. Health insurance for self 25000.",
+    "expected_valid": true,
+    "description": "Crore salary format subject to surcharge"
+  },
+  {
+    "id": 8,
+    "category": "Different Salary Formats",
+    "query": "My monthly salary is 100k per month. I pay 15k rent monthly. No deductions.",
+    "expected_valid": true,
+    "description": "Monthly salary requiring annualization"
+  },
+  {
+    "id": 9,
+    "category": "Different Salary Formats",
+    "query": "Har mahine 75,000 kamata hu. Kiraya 12000 har mahine deta hu. 80C me 1 lakh hai.",
+    "expected_valid": true,
+    "description": "Hinglish monthly salary annualization"
+  },
+  {
+    "id": 10,
+    "category": "Different Salary Formats",
+    "query": "Annual package of 650000 rupees. No rent. 80C is 50k.",
+    "expected_valid": true,
+    "description": "Plain rupee integer notation below 87A threshold"
+  },
+  {
+    "id": 11,
+    "category": "Senior Citizen Parents",
+    "query": "Annual salary 16 lakh, paying 25000 health insurance for self and 50000 for parents who are senior citizens.",
+    "expected_valid": true,
+    "description": "Senior citizen parent health insurance deduction"
+  },
+  {
+    "id": 12,
+    "category": "Senior Citizen Parents",
+    "query": "Package 14L. Mummy papa senior citizen hai unke liye 45,000 ka mediclaim bhara hai, apna 20,000.",
+    "expected_valid": true,
+    "description": "Hinglish senior parents mediclaim"
+  },
+  {
+    "id": 13,
+    "category": "Home Loan Interest",
+    "query": "My salary is 20 lakh per year. I am paying 2.5 lakh home loan interest for self occupied flat and 1.5 lakh 80C.",
+    "expected_valid": true,
+    "description": "Home loan capped at 2 lakh"
+  },
+  {
+    "id": 14,
+    "category": "Home Loan Interest",
+    "query": "Saal ka salary 11 lakh hai. Ghar ka loan byaj 1.8 lakh diya aur NPS me 50k dala.",
+    "expected_valid": true,
+    "description": "Hinglish 24b and NPS"
+  },
+  {
+    "id": 15,
+    "category": "Finance Act 2025 Query",
+    "query": "My CTC is 12.5 lakh for FY 2025-26. I do not pay rent and have no deductions.",
+    "expected_valid": true,
+    "description": "FY 2025-26 under new regime with zero tax due to revised 87A rebate"
+  },
+  {
+    "id": 16,
+    "category": "Finance Act 2025 Query",
+    "query": "Budget 2025 ke hisab se 2025-26 me mera salary 12 lakh hai. Kitna tax bachega?",
+    "expected_valid": true,
+    "description": "Hinglish FY 2025-26 query"
+  },
+  {
+    "id": 17,
+    "category": "Missing Information",
+    "query": "I pay 25,000 monthly rent in Kolkata and invested 1.5L in 80C. Please calculate my tax.",
+    "expected_valid": false,
+    "description": "Salary completely missing"
+  },
+  {
+    "id": 18,
+    "category": "Missing Information",
+    "query": "Maine 80C me 1.5 lakh aur NPS me 50,000 lagaya hai. Mera tax kitna hoga?",
+    "expected_valid": false,
+    "description": "Hinglish missing salary"
+  },
+  {
+    "id": 19,
+    "category": "Missing Information",
+    "query": "I am working as a software engineer in Pune paying 20k rent. How much tax under new regime?",
+    "expected_valid": false,
+    "description": "Missing gross salary"
+  },
+  {
+    "id": 20,
+    "category": "Missing Information",
+    "query": "Health insurance premium paid 30000 for parents. Calculate rebate under 87A.",
+    "expected_valid": false,
+    "description": "Missing taxable base"
+  },
+  {
+    "id": 21,
+    "category": "Contradictory Statements",
+    "query": "My annual salary is 10 lakh per annum, but I earn 2 lakh per month. 80C is 1.5 lakh.",
+    "expected_valid": false,
+    "description": "Annual CTC 10L contradicts monthly salary 2L (24L annual)"
+  },
+  {
+    "id": 22,
+    "category": "Contradictory Statements",
+    "query": "Mera package saal ka 6 lakh hai aur har mahine 1.5 lakh kamata hu. Rent 10k hai.",
+    "expected_valid": false,
+    "description": "Hinglish monthly vs annual conflict"
+  },
+  {
+    "id": 23,
+    "category": "Contradictory Statements",
+    "query": "I live in my own house and pay no rent, but I pay 30,000 monthly rent for HRA exemption. Salary 14 lakh.",
+    "expected_valid": false,
+    "description": "Claims own house/no rent but claims rent paid"
+  },
+  {
+    "id": 24,
+    "category": "Contradictory Statements",
+    "query": "Mera apna ghar hai koi kiraya nahi lagta par 25k monthly rent receipt hai. Package 18 lakh.",
+    "expected_valid": false,
+    "description": "Hinglish rent contradiction"
+  },
+  {
+    "id": 25,
+    "category": "Contradictory Statements",
+    "query": "I am 26 years old and I am claiming senior citizen tax slab exemption for myself. Salary 9 lakh.",
+    "expected_valid": false,
+    "description": "Age 26 contradicts senior citizen status"
+  },
+  {
+    "id": 26,
+    "category": "Ambiguous Amounts",
+    "query": "I earn 60000. Rent is 15000. 80C is 50000.",
+    "expected_valid": false,
+    "description": "Salary 60000 is ambiguous: monthly or annual?"
+  },
+  {
+    "id": 27,
+    "category": "Ambiguous Amounts",
+    "query": "Mera income 80000 hai. Tax kitna banega?",
+    "expected_valid": false,
+    "description": "Hinglish ambiguous amount"
+  },
+  {
+    "id": 28,
+    "category": "High Income Surcharge",
+    "query": "Annual salary 65 lakh. 80C 1.5 lakh, 80CCD 50k, 80D 25k, rent 50k monthly in Chennai.",
+    "expected_valid": true,
+    "description": "10% surcharge tier in metro Chennai"
+  },
+  {
+    "id": 29,
+    "category": "High Income Surcharge",
+    "query": "Salary is 1.5 crore per annum. 80C 1.5L. Calculate tax under both regimes.",
+    "expected_valid": true,
+    "description": "15% surcharge tier"
+  },
+  {
+    "id": 30,
+    "category": "High Income Surcharge",
+    "query": "Annual income 2.8 crore. Home loan interest 2 lakh. New regime calculation.",
+    "expected_valid": true,
+    "description": "25% surcharge tier"
+  },
+  {
+    "id": 31,
+    "category": "High Income Surcharge",
+    "query": "Package 6 crore per year. Old regime vs new regime tax comparison.",
+    "expected_valid": true,
+    "description": "37% Old regime surcharge vs 25% capped New regime surcharge"
+  },
+  {
+    "id": 32,
+    "category": "Boundary Cases",
+    "query": "Salary is exactly 300000 per year. No investments.",
+    "expected_valid": true,
+    "description": "Exactly on nil slab threshold"
+  },
+  {
+    "id": 33,
+    "category": "Boundary Cases",
+    "query": "Annual gross salary 750000 in FY 2024-25. No deductions.",
+    "expected_valid": true,
+    "description": "Net taxable income 6,75,000 under new regime (Rebate eligible)"
+  },
+  {
+    "id": 34,
+    "category": "Boundary Cases",
+    "query": "Salary is 775000 in FY 2024-25. No rent or investments.",
+    "expected_valid": true,
+    "description": "Net taxable income 7,00,000 (Exact 87A threshold)"
+  },
+  {
+    "id": 35,
+    "category": "Boundary Cases",
+    "query": "Salary is 785000 in FY 2024-25. No rent or investments.",
+    "expected_valid": true,
+    "description": "Net taxable 7,10,000 (Triggers 87A marginal relief)"
+  },
+  {
+    "id": 36,
+    "category": "Zero Deductions",
+    "query": "My CTC is 10 lakh. I have made zero investments and pay no rent.",
+    "expected_valid": true,
+    "description": "Plain salaried individual without any Chapter VI-A investments"
+  },
+  {
+    "id": 37,
+    "category": "Hinglish - Zero Deductions",
+    "query": "Mera 9 lakh CTC hai, koi deduction ya investment nahi hai, new regime me tax batao.",
+    "expected_valid": true,
+    "description": "Hinglish straightforward query"
+  },
+  {
+    "id": 38,
+    "category": "Metro vs Non-Metro",
+    "query": "Salary 12 LPA, basic 6 lakh, HRA 2.4 lakh, rent paid 25000 monthly in Delhi.",
+    "expected_valid": true,
+    "description": "50% metro rule test"
+  },
+  {
+    "id": 39,
+    "category": "Metro vs Non-Metro",
+    "query": "Salary 12 LPA, basic 6 lakh, HRA 2.4 lakh, rent paid 25000 monthly in Indore.",
+    "expected_valid": true,
+    "description": "40% non-metro rule test"
+  },
+  {
+    "id": 40,
+    "category": "Senior Citizen Self",
+    "query": "I am a retired senior citizen re-employed on salary of 8 lakh. 80D is 40000.",
+    "expected_valid": true,
+    "description": "Senior citizen self with 50k 80D limit"
+  },
+  {
+    "id": 41,
+    "category": "Excess Deductions",
+    "query": "Annual package 22 lakh. Invested 4 lakh in 80C, 1 lakh in NPS, 60000 in 80D.",
+    "expected_valid": true,
+    "description": "Capping mechanisms for 80C, 80CCD, 80D"
+  },
+  {
+    "id": 42,
+    "category": "Hinglish - Slang & Conversational",
+    "query": "Bhai meri tankhwah saal ki 11.5 lakh hai. 1.5L PPF me dala, mummy papa ke liye 30k ka insurance liya. Tax bachega?",
+    "expected_valid": true,
+    "description": "Conversational Hinglish"
+  },
+  {
+    "id": 43,
+    "category": "Hinglish - Slang & Conversational",
+    "query": "Boss CTC 28 lakh hai. Home loan ka interest 2.2L hai aur NPS me 50k daal diya. Old regime lu ya New?",
+    "expected_valid": true,
+    "description": "Conversational tax comparison query"
+  },
+  {
+    "id": 44,
+    "category": "Low Income",
+    "query": "Gross salary is 450000 per annum. No other investments.",
+    "expected_valid": true,
+    "description": "Tax zero under both regimes"
+  },
+  {
+    "id": 45,
+    "category": "Low Income - Hinglish",
+    "query": "Saal ka 4 lakh kamaata hu. Tax kitna dena hoga?",
+    "expected_valid": true,
+    "description": "Hinglish below taxable limit"
+  },
+  {
+    "id": 46,
+    "category": "Complex Multi-component",
+    "query": "Gross salary 3200000, basic 1600000, HRA 480000, rent 40000 per month in Mumbai, 80C 150000, 80CCD 50000, 80D self 25000, 80D senior parents 50000, home loan interest 200000.",
+    "expected_valid": true,
+    "description": "All supported features combined in one request"
+  },
+  {
+    "id": 47,
+    "category": "Complex Multi-component - Hinglish",
+    "query": "Package 30 lakh hai. Delhi me 45,000 monthly kiraya hai. 80C me 1.5 lakh, NPS 50k, parents senior citizen hai unka 50k insurance, home loan interest 2 lakh.",
+    "expected_valid": true,
+    "description": "Hinglish full suite deductions"
+  },
+  {
+    "id": 48,
+    "category": "Marginal Relief on Surcharge",
+    "query": "My annual salary is 5100000. No rent, standard deduction only.",
+    "expected_valid": true,
+    "description": "Tests surcharge marginal relief right at 51L"
+  },
+  {
+    "id": 49,
+    "category": "Marginal Relief on Surcharge",
+    "query": "Annual gross salary 10200000. New regime FY 2024-25.",
+    "expected_valid": true,
+    "description": "Tests 15% surcharge marginal relief at 1.02 Cr"
+  },
+  {
+    "id": 50,
+    "category": "Finance Act 2025 High Threshold",
+    "query": "In FY 2025-26 my salary is 1275000. How much tax under new regime?",
+    "expected_valid": true,
+    "description": "12.75L minus 75k std ded = 12L taxable income = ZERO tax under FA 2025!"
+  },
+  {
+    "id": 51,
+    "category": "Finance Act 2025 Slabs",
+    "query": "CTC 25 lakh for financial year 2025-26. No investments.",
+    "expected_valid": true,
+    "description": "Reaches top 30% slab under FY 2025-26"
+  },
+  {
+    "id": 52,
+    "category": "Zero Salary",
+    "query": "My annual salary is 0. 80C is 50000.",
+    "expected_valid": true,
+    "description": "Zero income corner case"
+  }
+]
+

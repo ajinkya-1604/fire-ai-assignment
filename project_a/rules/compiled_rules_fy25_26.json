@@ -1,0 +1,73 @@
+{
+  "compiler_metadata": {
+    "engine": "Gemini-Rules-Compiler-v1",
+    "version": "1.1.0",
+    "compilation_date": "2025-02-15T10:00:00Z",
+    "reviewed_and_verified": true,
+    "statutory_sources": [
+      "Income-tax Act, 1961",
+      "Finance Act, 2025"
+    ]
+  },
+  "financial_year": "2025-26",
+  "assessment_year": "2026-27",
+  "old_regime": {
+    "standard_deduction": "50000.00",
+    "hra_exemption_enabled": true,
+    "chapter_via_enabled": true,
+    "caps": {
+      "section_80c": "150000.00",
+      "section_80ccd_1b": "50000.00",
+      "section_80d_self_regular": "25000.00",
+      "section_80d_self_senior": "50000.00",
+      "section_80d_parents_regular": "25000.00",
+      "section_80d_parents_senior": "50000.00",
+      "home_loan_interest_24b": "200000.00"
+    },
+    "slabs_regular": [
+      {"lower": "0.00", "upper": "250000.00", "rate": "0.00"},
+      {"lower": "250000.00", "upper": "500000.00", "rate": "0.05"},
+      {"lower": "500000.00", "upper": "1000000.00", "rate": "0.20"},
+      {"lower": "1000000.00", "upper": null, "rate": "0.30"}
+    ],
+    "slabs_senior": [
+      {"lower": "0.00", "upper": "300000.00", "rate": "0.00"},
+      {"lower": "300000.00", "upper": "500000.00", "rate": "0.05"},
+      {"lower": "500000.00", "upper": "1000000.00", "rate": "0.20"},
+      {"lower": "1000000.00", "upper": null, "rate": "0.30"}
+    ],
+    "rebate_87a": {
+      "threshold": "500000.00",
+      "max_rebate": "12500.00",
+      "marginal_relief": false
+    },
+    "surcharge_max_rate": "0.37"
+  },
+  "new_regime": {
+    "standard_deduction": "75000.00",
+    "hra_exemption_enabled": false,
+    "chapter_via_enabled": false,
+    "slabs": [
+      {"lower": "0.00", "upper": "400000.00", "rate": "0.00"},
+      {"lower": "400000.00", "upper": "800000.00", "rate": "0.05"},
+      {"lower": "800000.00", "upper": "1200000.00", "rate": "0.10"},
+      {"lower": "1200000.00", "upper": "1600000.00", "rate": "0.15"},
+      {"lower": "1600000.00", "upper": "2000000.00", "rate": "0.20"},
+      {"lower": "2000000.00", "upper": "2400000.00", "rate": "0.25"},
+      {"lower": "2400000.00", "upper": null, "rate": "0.30"}
+    ],
+    "rebate_87a": {
+      "threshold": "1200000.00",
+      "max_rebate": "60000.00",
+      "marginal_relief": true
+    },
+    "surcharge_max_rate": "0.25"
+  },
+  "surcharge_brackets": [
+    {"threshold": "5000000.00", "rate": "0.10"},
+    {"threshold": "10000000.00", "rate": "0.15"},
+    {"threshold": "20000000.00", "rate": "0.25"}
+  ],
+  "cess_rate": "0.04"
+}
+
